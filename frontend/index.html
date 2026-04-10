@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flys World</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="app"></div>
+
+  <div class="menu-overlay" id="menu-overlay">
+    <section class="menu-shell">
+      <div class="menu-view is-active" data-view="home">
+        <p class="eyebrow">Online Neighborhood Flight</p>
+        <h1>Flys World</h1>
+        <p class="menu-copy">
+          Join a live neighborhood server, browse public lobbies, or spin up your own
+          public or private world with room for up to 20 players.
+        </p>
+        <button id="menu-play-button" class="menu-button menu-button-primary" type="button">Play</button>
+      </div>
+
+      <div class="menu-view" data-view="servers">
+        <div class="menu-header-row">
+          <div>
+            <p class="eyebrow">Server Browser</p>
+            <h2>Choose Your World</h2>
+          </div>
+          <button class="menu-button menu-button-ghost" id="menu-back-home-button" type="button">Back</button>
+        </div>
+
+        <label class="field">
+          <span>Fly Name</span>
+          <input id="display-name-input" maxlength="20" placeholder="Fly Name" type="text">
+        </label>
+
+        <div class="join-code-row">
+          <label class="field field-grow">
+            <span>Join With Code</span>
+            <input id="join-code-input" maxlength="12" placeholder="Enter private code" type="text">
+          </label>
+          <button id="join-code-button" class="menu-button" type="button">Join</button>
+        </div>
+
+        <div class="browser-actions">
+          <button id="open-create-button" class="menu-button menu-button-primary" type="button">Create Lobby</button>
+          <button id="refresh-servers-button" class="menu-button menu-button-ghost" type="button">Refresh</button>
+        </div>
+        <p class="menu-note">Public servers auto-refresh while this browser is open.</p>
+
+        <div class="server-list-wrap">
+          <div class="server-list-header">
+            <span>Public Servers</span>
+            <strong id="public-server-count">0 live</strong>
+          </div>
+          <div id="public-server-list" class="server-list"></div>
+        </div>
+      </div>
+
+      <div class="menu-view" data-view="create">
+        <div class="menu-header-row">
+          <div>
+            <p class="eyebrow">Create Lobby</p>
+            <h2>Launch A Server</h2>
+          </div>
+          <button class="menu-button menu-button-ghost" id="menu-back-browser-button" type="button">Back</button>
+        </div>
+
+        <label class="field">
+          <span>Lobby Name</span>
+          <input id="create-lobby-name-input" maxlength="28" placeholder="Skyline Garden" type="text">
+        </label>
+
+        <div class="visibility-row">
+          <button class="menu-toggle is-active" id="visibility-public-button" type="button">Public</button>
+          <button class="menu-toggle" id="visibility-private-button" type="button">Private</button>
+        </div>
+
+        <label class="field" id="private-code-field" hidden>
+          <span>Private Code</span>
+          <input id="create-code-input" maxlength="12" placeholder="Create a code" type="text">
+        </label>
+
+        <p class="menu-copy compact" id="create-help-copy">
+          Public servers appear in the browser for anyone to join, up to 20 players.
+        </p>
+
+        <button id="create-lobby-button" class="menu-button menu-button-primary" type="button">Create And Join</button>
+      </div>
+
+      <p class="menu-status" id="menu-status" role="status" aria-live="polite"></p>
+    </section>
+  </div>
+
+  <div class="hud">
+    <div class="hud-card brand-card">
+      <p class="eyebrow">Procedural Browser Game</p>
+      <h1>Flys World</h1>
+      <p class="summary">
+        Buzz through an endlessly streaming neighborhood filled with homes, parks,
+        walkers, birds, and backyard wildlife.
+      </p>
+    </div>
+
+    <div class="hud-card stats-card">
+      <div class="stat-row">
+        <span>District</span>
+        <strong id="district">Loading...</strong>
+      </div>
+      <div class="stat-row">
+        <span>Speed</span>
+        <strong><span id="speed">0.0</span> m/s</strong>
+      </div>
+      <div class="stat-row">
+        <span>Altitude</span>
+        <strong><span id="altitude">0.0</span> m</strong>
+      </div>
+      <div class="stat-row">
+        <span>Neighborhood Life</span>
+        <strong id="life-count">0 active</strong>
+      </div>
+      <div class="stat-row">
+        <span>Status</span>
+        <strong id="status">Click Enter Flight</strong>
+      </div>
+      <div class="stamina-block">
+        <div class="stat-row">
+          <span>Stamina</span>
+          <strong id="stamina-label">100%</strong>
+        </div>
+        <div class="stamina-track" aria-hidden="true">
+          <div id="stamina-fill" class="stamina-fill"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="screen-tint" aria-hidden="true"></div>
+  <div class="center-reticle" aria-hidden="true"></div>
+  <div class="wing wing-left" aria-hidden="true"></div>
+  <div class="wing wing-right" aria-hidden="true"></div>
+
+  <section class="intro-card is-hidden" id="session-panel">
+    <p class="eyebrow">Server Session</p>
+    <h2 id="session-title">Join A Server</h2>
+    <p id="session-copy">
+      Join a public or private server from the menu to start flying online.
+    </p>
+    <div class="session-meta">
+      <span class="session-chip" id="session-access-chip">Offline</span>
+      <span class="session-chip" id="session-host-chip">Solo</span>
+    </div>
+    <div class="session-server-panel" id="session-hud">
+      <div class="server-list-header">
+        <span>Server Details</span>
+        <strong id="player-count">0 / 20</strong>
+      </div>
+      <div class="session-server-grid">
+        <div class="stat-row">
+          <span>Server</span>
+          <strong id="server-name">Offline</strong>
+        </div>
+        <div class="stat-row">
+          <span>Access</span>
+          <strong id="server-visibility">Not Connected</strong>
+        </div>
+        <div class="stat-row" id="server-code-row" hidden>
+          <span>Code</span>
+          <strong id="server-code">-</strong>
+        </div>
+      </div>
+    </div>
+    <div class="session-actions">
+      <button id="enter-flight-button" class="play-button" type="button">Enter Flight</button>
+      <button id="copy-server-code-button" class="menu-button menu-button-ghost" type="button" hidden>Copy Code</button>
+      <button id="leave-server-button" class="menu-button menu-button-ghost" type="button">Leave Server</button>
+    </div>
+    <div class="color-panel">
+      <div class="server-list-header">
+        <span>Fly Color</span>
+        <strong id="player-color-label">Sunflare</strong>
+      </div>
+      <div class="color-picker" id="player-color-picker" role="group" aria-label="Choose your fly color"></div>
+    </div>
+    <div class="roster-panel">
+      <div class="server-list-header">
+        <span>Roster</span>
+        <strong id="roster-count">0 players</strong>
+      </div>
+      <div id="roster-list" class="roster-list"></div>
+    </div>
+    <p class="footnote">
+      Press <kbd>Esc</kbd> to release the cursor. The Quest system/menu button is reserved
+      by the headset, so leaving the server is handled from this panel.
+    </p>
+  </section>
+
+  <script src="./config.js"></script>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
