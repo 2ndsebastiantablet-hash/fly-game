@@ -22,48 +22,61 @@ function normalizeBase64Payload(rawText, response) {
   return clean;
 }
 
+function describeThrownValue(error) {
+  if (error instanceof Error) {
+    return error.message || error.name || "Unknown error";
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (error === undefined) {
+    return "undefined";
+  }
+
+  if (error === null) {
+    return "null";
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 function decodeBase64ToBytes(base64Text) {
-  const sanitized = base64Text.replace(/=+$/, "");
+  const sanitized = base64Text.replace(/\s+/g, "").replace(/=+$/, "");
   const padded = sanitized.padEnd(Math.ceil(sanitized.length / 4) * 4, "=");
-  const chunkSize = 16384;
-  const chunks = [];
-  let totalLength = 0;
+  let binary = "";
 
-  for (let index = 0; index < padded.length; index += chunkSize) {
-    const chunk = padded.slice(index, index + chunkSize);
-    let binary = "";
-
-    try {
-      binary = atob(chunk);
-    } catch {
-      throw new Error("Game bundle base64 decode failed.");
-    }
-
-    const bytes = new Uint8Array(binary.length);
-    for (let binaryIndex = 0; binaryIndex < binary.length; binaryIndex += 1) {
-      bytes[binaryIndex] = binary.charCodeAt(binaryIndex);
-    }
-
-    totalLength += bytes.length;
-    chunks.push(bytes);
+  try {
+    binary = atob(padded);
+  } catch (error) {
+    throw new Error(`Game bundle base64 decode failed: ${describeThrownValue(error)}`);
   }
 
-  const output = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.length;
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
   }
 
-  return output;
+  return bytes;
 }
 
 function unpackGameBundle(compressedBytes) {
+  if (compressedBytes.length < 2 || compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) {
+    const firstBytes = Array.from(compressedBytes.slice(0, 8))
+      .map((value) => value.toString(16).padStart(2, "0"))
+      .join(" ");
+    throw new Error(`Decoded bundle is not valid gzip data. First bytes: ${firstBytes || "empty"}`);
+  }
+
   try {
-    const sourceBytes = ungzip(compressedBytes);
-    return new TextDecoder().decode(sourceBytes);
+    return ungzip(compressedBytes, { to: "string" });
   } catch (error) {
-    throw new Error(`Failed to unpack game bundle: ${error.message}`);
+    throw new Error(`Failed to unpack game bundle: ${describeThrownValue(error)}`);
   }
 }
 
@@ -92,7 +105,7 @@ async function boot() {
 boot().catch((error) => {
   console.error(error);
   const pre = document.createElement("pre");
-  pre.textContent = `Flys World failed to load.\n\n${error.message}`;
+  pre.textContent = `Flys World failed to load.\n\n${describeThrownValue(error)}`;
   pre.style.position = "fixed";
   pre.style.inset = "24px";
   pre.style.padding = "16px";
