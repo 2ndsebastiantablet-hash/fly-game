@@ -30,36 +30,42 @@ function decodeBase64ToBytes(base64Text) {
   }
 
   const clean = base64Text.replace(/\s+/g, "");
-  const trimmed = clean.replace(/=+$/, "");
-  const remainder = trimmed.length % 4;
-  if (remainder === 1) {
-    throw new Error("Game bundle base64 length is invalid.");
-  }
-
-  const outputLength = Math.floor((trimmed.length * 6) / 8);
+  const padded = clean.padEnd(Math.ceil(clean.length / 4) * 4, "=");
+  const padding = padded.endsWith("==") ? 2 : padded.endsWith("=") ? 1 : 0;
+  const outputLength = (padded.length / 4) * 3 - padding;
   const bytes = new Uint8Array(outputLength);
-  let buffer = 0;
-  let bits = 0;
   let outputIndex = 0;
 
-  for (let index = 0; index < trimmed.length; index += 1) {
-    const code = trimmed.charCodeAt(index);
-    const value = code < 256 ? lookup[code] : 255;
-    if (value === 255) {
+  for (let index = 0; index < padded.length; index += 4) {
+    const a = padded.charCodeAt(index);
+    const b = padded.charCodeAt(index + 1);
+    const c = padded.charCodeAt(index + 2);
+    const d = padded.charCodeAt(index + 3);
+
+    const valueA = a < 256 ? lookup[a] : 255;
+    const valueB = b < 256 ? lookup[b] : 255;
+    const valueC = c === 61 ? 0 : c < 256 ? lookup[c] : 255;
+    const valueD = d === 61 ? 0 : d < 256 ? lookup[d] : 255;
+
+    if (valueA === 255 || valueB === 255 || (c !== 61 && valueC === 255) || (d !== 61 && valueD === 255)) {
       throw new Error("Game bundle contains invalid base64 characters.");
     }
 
-    buffer = (buffer << 6) | value;
-    bits += 6;
+    bytes[outputIndex] = (valueA << 2) | (valueB >> 4);
+    outputIndex += 1;
 
-    if (bits >= 8) {
-      bits -= 8;
-      bytes[outputIndex] = (buffer >> bits) & 0xff;
+    if (c !== 61 && outputIndex < outputLength) {
+      bytes[outputIndex] = ((valueB & 15) << 4) | (valueC >> 2);
+      outputIndex += 1;
+    }
+
+    if (d !== 61 && outputIndex < outputLength) {
+      bytes[outputIndex] = ((valueC & 3) << 6) | valueD;
       outputIndex += 1;
     }
   }
 
-  return outputIndex === bytes.length ? bytes : bytes.slice(0, outputIndex);
+  return bytes;
 }
 
 async function loadBundleSource() {
