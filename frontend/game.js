@@ -46,23 +46,21 @@ function describeThrownValue(error) {
   }
 }
 
-function decodeBase64ToBytes(base64Text) {
+async function decodeBase64ToBytes(base64Text) {
   const sanitized = base64Text.replace(/\s+/g, "").replace(/=+$/, "");
   const padded = sanitized.padEnd(Math.ceil(sanitized.length / 4) * 4, "=");
-  let binary = "";
+  const dataUrl = `data:application/gzip;base64,${padded}`;
 
   try {
-    binary = atob(padded);
+    const response = await fetch(dataUrl);
+    if (!response.ok) {
+      throw new Error(`Data URL decode failed (${response.status})`);
+    }
+
+    return new Uint8Array(await response.arrayBuffer());
   } catch (error) {
     throw new Error(`Game bundle base64 decode failed: ${describeThrownValue(error)}`);
   }
-
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
 }
 
 function unpackGameBundle(compressedBytes) {
@@ -87,7 +85,7 @@ async function loadBundleSource() {
   }
 
   const encoded = normalizeBase64Payload(await response.text(), response);
-  const compressedBytes = decodeBase64ToBytes(encoded);
+  const compressedBytes = await decodeBase64ToBytes(encoded);
   return unpackGameBundle(compressedBytes);
 }
 
