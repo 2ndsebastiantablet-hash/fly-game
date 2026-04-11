@@ -5,11 +5,11 @@ const bundlePartPaths = Array.from({ length: 8 }, (_, index) =>
 );
 
 const expectedBundleStats = {
-  joinedBase64Length: 67764,
-  decodedByteLength: 50821,
-  first16Bytes: "1f 8b 08 00 e6 6e da 69 02 ff ec bd fb 83 db 36",
-  joinedBase64Sha256: "606b6d7331fc46da1cd4e4c312c55c425b8a19889fc582050d8173230f1fe309",
-  decodedBytesSha256: "c9f7b44ff63df05ef0a5fb25ca2068b8dcecd4388fa21c69106353e13fc65bfc",
+  joinedBase64Length: 68500,
+  decodedByteLength: 51375,
+  first16Bytes: "1f 8b 08 00 00 00 00 00 04 00 ec bd fb 83 1b 37",
+  joinedBase64Sha256: "ac44052f2c6f820f124af8db89f35e332dc931e9f5bc550fa5bab5d9ef29a795",
+  decodedBytesSha256: "ce3db126aa168123f28f9384990fde05cdeefe4baf503c7383482094cf436dfc",
 };
 
 const runtimeDiagnostics = {
