@@ -1,6 +1,19 @@
 import { ungzip } from "https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.esm.mjs";
 
 const bundlePath = new URL("./game.bundle.b64", import.meta.url);
+const loaderDiagnostics = {
+  loaderVersion: "2026-04-11-debug-bundle-fix",
+  fetchUrl: bundlePath.href,
+  fetchStatus: "not-started",
+  rawTextLength: null,
+  normalizedLength: null,
+  normalizedMod4: null,
+  tailPreview: null,
+  decodedByteLength: null,
+  first8Bytes: null,
+  hasGzipMagic: null,
+  failureStage: null,
+};
 
 function normalizeBase64Payload(rawText, response) {
   const strippedBom = rawText.replace(/^\uFEFF/, "").trim();
@@ -46,8 +59,40 @@ function describeThrownValue(error) {
   }
 }
 
+function captureByteDiagnostics(bytes) {
+  loaderDiagnostics.decodedByteLength = bytes.length;
+  loaderDiagnostics.first8Bytes = Array.from(bytes.slice(0, 8))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join(" ");
+  loaderDiagnostics.hasGzipMagic = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+}
+
+function formatDiagnostics() {
+  return [
+    `loaderVersion: ${loaderDiagnostics.loaderVersion}`,
+    `fetchUrl: ${loaderDiagnostics.fetchUrl}`,
+    `fetchStatus: ${loaderDiagnostics.fetchStatus}`,
+    `rawTextLength: ${loaderDiagnostics.rawTextLength ?? "n/a"}`,
+    `normalizedLength: ${loaderDiagnostics.normalizedLength ?? "n/a"}`,
+    `normalizedMod4: ${loaderDiagnostics.normalizedMod4 ?? "n/a"}`,
+    `tailPreview: ${loaderDiagnostics.tailPreview ?? "n/a"}`,
+    `decodedByteLength: ${loaderDiagnostics.decodedByteLength ?? "n/a"}`,
+    `first8Bytes: ${loaderDiagnostics.first8Bytes ?? "n/a"}`,
+    `hasGzipMagic: ${loaderDiagnostics.hasGzipMagic ?? "n/a"}`,
+    `failureStage: ${loaderDiagnostics.failureStage ?? "none"}`,
+  ].join("\n");
+}
+
 async function decodeBase64ToBytes(base64Text) {
+  loaderDiagnostics.failureStage = "decodeBase64ToBytes";
   const sanitized = base64Text.replace(/\s+/g, "").replace(/=+$/, "");
+  loaderDiagnostics.normalizedMod4 = sanitized.length % 4;
+  loaderDiagnostics.tailPreview = sanitized.slice(-24);
+
+  if (loaderDiagnostics.normalizedMod4 === 1) {
+    throw new Error("Hosted game bundle is malformed or truncated: normalized base64 length has remainder 1.");
+  }
+
   const padded = sanitized.padEnd(Math.ceil(sanitized.length / 4) * 4, "=");
   const dataUrl = `data:application/gzip;base64,${padded}`;
 
@@ -64,27 +109,33 @@ async function decodeBase64ToBytes(base64Text) {
 }
 
 function unpackGameBundle(compressedBytes) {
+  loaderDiagnostics.failureStage = "unpackGameBundle";
+  captureByteDiagnostics(compressedBytes);
   if (compressedBytes.length < 2 || compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) {
-    const firstBytes = Array.from(compressedBytes.slice(0, 8))
-      .map((value) => value.toString(16).padStart(2, "0"))
-      .join(" ");
-    throw new Error(`Decoded bundle is not valid gzip data. First bytes: ${firstBytes || "empty"}`);
+    throw new Error(`Decoded bundle is not valid gzip data. First bytes: ${loaderDiagnostics.first8Bytes || "empty"}`);
   }
 
   try {
     return ungzip(compressedBytes, { to: "string" });
   } catch (error) {
-    throw new Error(`Failed to unpack game bundle: ${describeThrownValue(error)}`);
+    throw new Error(`Failed to unpack game bundle at frontend/game.js:119: ${describeThrownValue(error)}`);
   }
 }
 
 async function loadBundleSource() {
+  loaderDiagnostics.failureStage = "loadBundleSource.fetch";
   const response = await fetch(bundlePath, { cache: "no-store" });
+  loaderDiagnostics.fetchStatus = `${response.status} ${response.statusText}`.trim();
   if (!response.ok) {
     throw new Error(`Failed to load game bundle (${response.status})`);
   }
 
-  const encoded = normalizeBase64Payload(await response.text(), response);
+  loaderDiagnostics.failureStage = "loadBundleSource.readText";
+  const rawText = await response.text();
+  loaderDiagnostics.rawTextLength = rawText.length;
+  loaderDiagnostics.failureStage = "loadBundleSource.normalize";
+  const encoded = normalizeBase64Payload(rawText, response);
+  loaderDiagnostics.normalizedLength = encoded.length;
   const compressedBytes = await decodeBase64ToBytes(encoded);
   return unpackGameBundle(compressedBytes);
 }
@@ -103,7 +154,8 @@ async function boot() {
 boot().catch((error) => {
   console.error(error);
   const pre = document.createElement("pre");
-  pre.textContent = `Flys World failed to load.\n\n${describeThrownValue(error)}`;
+  const stack = error instanceof Error && error.stack ? `\n\nStack:\n${error.stack}` : "";
+  pre.textContent = `Flys World failed to load.\n\n${describeThrownValue(error)}\n\nDiagnostics:\n${formatDiagnostics()}${stack}`;
   pre.style.position = "fixed";
   pre.style.inset = "24px";
   pre.style.padding = "16px";
