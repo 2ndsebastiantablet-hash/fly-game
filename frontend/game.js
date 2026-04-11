@@ -1,3 +1,5 @@
+import { ungzip } from "https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.esm.mjs";
+
 const bundlePath = new URL("./game.bundle.b64", import.meta.url);
 
 function normalizeBase64Payload(rawText, response) {
@@ -17,16 +19,15 @@ function normalizeBase64Payload(rawText, response) {
     throw new Error("Game bundle did not contain decodable base64 data.");
   }
 
-  return clean.replace(/=+$/, "");
+  return clean;
 }
 
 function decodeBase64ToBytes(base64Text) {
-  const padded = base64Text.padEnd(Math.ceil(base64Text.length / 4) * 4, "=");
-  const padding = padded.endsWith("==") ? 2 : padded.endsWith("=") ? 1 : 0;
-  const outputLength = (padded.length / 4) * 3 - padding;
-  const bytes = new Uint8Array(outputLength);
+  const sanitized = base64Text.replace(/=+$/, "");
+  const padded = sanitized.padEnd(Math.ceil(sanitized.length / 4) * 4, "=");
   const chunkSize = 16384;
-  let outputIndex = 0;
+  const chunks = [];
+  let totalLength = 0;
 
   for (let index = 0; index < padded.length; index += chunkSize) {
     const chunk = padded.slice(index, index + chunkSize);
@@ -38,13 +39,32 @@ function decodeBase64ToBytes(base64Text) {
       throw new Error("Game bundle base64 decode failed.");
     }
 
-    for (let binaryIndex = 0; binaryIndex < binary.length && outputIndex < outputLength; binaryIndex += 1) {
-      bytes[outputIndex] = binary.charCodeAt(binaryIndex);
-      outputIndex += 1;
+    const bytes = new Uint8Array(binary.length);
+    for (let binaryIndex = 0; binaryIndex < binary.length; binaryIndex += 1) {
+      bytes[binaryIndex] = binary.charCodeAt(binaryIndex);
     }
+
+    totalLength += bytes.length;
+    chunks.push(bytes);
   }
 
-  return bytes;
+  const output = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return output;
+}
+
+function unpackGameBundle(compressedBytes) {
+  try {
+    const sourceBytes = ungzip(compressedBytes);
+    return new TextDecoder().decode(sourceBytes);
+  } catch (error) {
+    throw new Error(`Failed to unpack game bundle: ${error.message}`);
+  }
 }
 
 async function loadBundleSource() {
@@ -55,13 +75,7 @@ async function loadBundleSource() {
 
   const encoded = normalizeBase64Payload(await response.text(), response);
   const compressedBytes = decodeBase64ToBytes(encoded);
-
-  try {
-    const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-    return await new Response(stream).text();
-  } catch (error) {
-    throw new Error(`Failed to unpack game bundle: ${error.message}`);
-  }
+  return unpackGameBundle(compressedBytes);
 }
 
 async function boot() {
