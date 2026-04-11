@@ -17,16 +17,49 @@ function normalizeBase64Payload(rawText, response) {
     throw new Error("Game bundle did not contain decodable base64 data.");
   }
 
-  return clean.padEnd(Math.ceil(clean.length / 4) * 4, "=");
+  return clean;
 }
 
-function decodeBase64(base64Text) {
-  const binary = atob(base64Text);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
+function decodeBase64ToBytes(base64Text) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const lookup = new Uint8Array(256);
+  lookup.fill(255);
+
+  for (let index = 0; index < alphabet.length; index += 1) {
+    lookup[alphabet.charCodeAt(index)] = index;
   }
-  return bytes;
+
+  const clean = base64Text.replace(/\s+/g, "");
+  const trimmed = clean.replace(/=+$/, "");
+  const remainder = trimmed.length % 4;
+  if (remainder === 1) {
+    throw new Error("Game bundle base64 length is invalid.");
+  }
+
+  const outputLength = Math.floor((trimmed.length * 6) / 8);
+  const bytes = new Uint8Array(outputLength);
+  let buffer = 0;
+  let bits = 0;
+  let outputIndex = 0;
+
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const code = trimmed.charCodeAt(index);
+    const value = code < 256 ? lookup[code] : 255;
+    if (value === 255) {
+      throw new Error("Game bundle contains invalid base64 characters.");
+    }
+
+    buffer = (buffer << 6) | value;
+    bits += 6;
+
+    if (bits >= 8) {
+      bits -= 8;
+      bytes[outputIndex] = (buffer >> bits) & 0xff;
+      outputIndex += 1;
+    }
+  }
+
+  return outputIndex === bytes.length ? bytes : bytes.slice(0, outputIndex);
 }
 
 async function loadBundleSource() {
@@ -36,7 +69,7 @@ async function loadBundleSource() {
   }
 
   const encoded = normalizeBase64Payload(await response.text(), response);
-  const compressedBytes = decodeBase64(encoded);
+  const compressedBytes = decodeBase64ToBytes(encoded);
 
   try {
     const stream = new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream("gzip"));
