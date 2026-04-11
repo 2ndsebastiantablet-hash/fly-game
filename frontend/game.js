@@ -17,50 +17,29 @@ function normalizeBase64Payload(rawText, response) {
     throw new Error("Game bundle did not contain decodable base64 data.");
   }
 
-  return clean;
+  return clean.replace(/=+$/, "");
 }
 
 function decodeBase64ToBytes(base64Text) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const lookup = new Uint8Array(256);
-  lookup.fill(255);
-
-  for (let index = 0; index < alphabet.length; index += 1) {
-    lookup[alphabet.charCodeAt(index)] = index;
-  }
-
-  const clean = base64Text.replace(/\s+/g, "");
-  const padded = clean.padEnd(Math.ceil(clean.length / 4) * 4, "=");
+  const padded = base64Text.padEnd(Math.ceil(base64Text.length / 4) * 4, "=");
   const padding = padded.endsWith("==") ? 2 : padded.endsWith("=") ? 1 : 0;
   const outputLength = (padded.length / 4) * 3 - padding;
   const bytes = new Uint8Array(outputLength);
+  const chunkSize = 16384;
   let outputIndex = 0;
 
-  for (let index = 0; index < padded.length; index += 4) {
-    const a = padded.charCodeAt(index);
-    const b = padded.charCodeAt(index + 1);
-    const c = padded.charCodeAt(index + 2);
-    const d = padded.charCodeAt(index + 3);
+  for (let index = 0; index < padded.length; index += chunkSize) {
+    const chunk = padded.slice(index, index + chunkSize);
+    let binary = "";
 
-    const valueA = a < 256 ? lookup[a] : 255;
-    const valueB = b < 256 ? lookup[b] : 255;
-    const valueC = c === 61 ? 0 : c < 256 ? lookup[c] : 255;
-    const valueD = d === 61 ? 0 : d < 256 ? lookup[d] : 255;
-
-    if (valueA === 255 || valueB === 255 || (c !== 61 && valueC === 255) || (d !== 61 && valueD === 255)) {
-      throw new Error("Game bundle contains invalid base64 characters.");
+    try {
+      binary = atob(chunk);
+    } catch {
+      throw new Error("Game bundle base64 decode failed.");
     }
 
-    bytes[outputIndex] = (valueA << 2) | (valueB >> 4);
-    outputIndex += 1;
-
-    if (c !== 61 && outputIndex < outputLength) {
-      bytes[outputIndex] = ((valueB & 15) << 4) | (valueC >> 2);
-      outputIndex += 1;
-    }
-
-    if (d !== 61 && outputIndex < outputLength) {
-      bytes[outputIndex] = ((valueC & 3) << 6) | valueD;
+    for (let binaryIndex = 0; binaryIndex < binary.length && outputIndex < outputLength; binaryIndex += 1) {
+      bytes[outputIndex] = binary.charCodeAt(binaryIndex);
       outputIndex += 1;
     }
   }
