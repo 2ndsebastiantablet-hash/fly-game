@@ -79,12 +79,12 @@
     <div class="shell">
       <div class="panel">
         <h1>Reusable Multiplayer Template Example</h1>
-        <p>This tiny demo lets us create or join lobbies and move a dot around live with arrow keys or WASD.</p>
+        <p>This demo is built for the Cloudflare Worker backend. Move with arrow keys or WASD after joining a lobby.</p>
       </div>
 
       <div class="panel">
         <div class="row">
-          <input id="api-base" value="http://127.0.0.1:8100" />
+          <input id="api-base" value="http://127.0.0.1:8787" />
           <input id="player-name" value="Player" />
           <input id="lobby-name" value="My Lobby" />
           <input id="lobby-code" placeholder="Private code or join code" />
@@ -100,7 +100,7 @@
 
       <div class="panel">
         <h2>Live Example Arena</h2>
-        <p>Move with <code>WASD</code> or arrow keys. Open this page in two tabs to test fast.</p>
+        <p>Open this page in two tabs to test the Durable Object room live.</p>
         <div id="game"></div>
       </div>
     </div>

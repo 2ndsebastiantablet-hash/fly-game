@@ -2,15 +2,15 @@ export class MultiplayerClient {
   constructor(apiBase, options = {}) {
     this.apiBase = apiBase.replace(/\/+$/, "");
     this.wsBase = (options.wsBase || this.apiBase).replace(/^http/, "ws");
-    this.storageKey = options.storageKey || "multiplayer_template_session_token";
+    this.storageKey = options.storageKey || "multiplayer_template_session";
     this.pingMs = options.pingMs || 5000;
 
-    this.sessionToken = sessionStorage.getItem(this.storageKey) || null;
     this.socket = null;
     this.pingTimer = null;
     this.snapshot = null;
     this.playerState = {};
     this.playerMeta = {};
+    this.session = this.loadSession();
 
     this.onSnapshot = options.onSnapshot || (() => {});
     this.onOpen = options.onOpen || (() => {});
@@ -18,6 +18,31 @@ export class MultiplayerClient {
     this.onChat = options.onChat || (() => {});
     this.onCustom = options.onCustom || (() => {});
     this.onError = options.onError || (() => {});
+  }
+
+  loadSession() {
+    const raw = sessionStorage.getItem(this.storageKey);
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.sessionToken && parsed?.lobbyId) {
+        return parsed;
+      }
+    } catch {}
+
+    sessionStorage.removeItem(this.storageKey);
+    return null;
+  }
+
+  saveSession(session) {
+    this.session = session;
+    if (!session) {
+      sessionStorage.removeItem(this.storageKey);
+      return;
+    }
+
+    sessionStorage.setItem(this.storageKey, JSON.stringify(session));
   }
 
   async get(path) {
@@ -38,12 +63,6 @@ export class MultiplayerClient {
     return data;
   }
 
-  saveSessionToken(token) {
-    this.sessionToken = token;
-    if (token) sessionStorage.setItem(this.storageKey, token);
-    else sessionStorage.removeItem(this.storageKey);
-  }
-
   async listPublicLobbies() {
     const data = await this.get("/api/lobbies/public");
     return data.lobbies;
@@ -52,8 +71,12 @@ export class MultiplayerClient {
   async createLobby(options) {
     this.playerState = options.playerState || {};
     this.playerMeta = options.playerMeta || {};
+
     const data = await this.post("/api/lobbies/create", options);
-    this.saveSessionToken(data.sessionToken);
+    this.saveSession({
+      sessionToken: data.sessionToken,
+      lobbyId: data.lobby.lobbyId,
+    });
     this.snapshot = data.lobby;
     this.onSnapshot(this.snapshot);
     await this.connectSocket();
@@ -63,8 +86,12 @@ export class MultiplayerClient {
   async joinLobbyById(options) {
     this.playerState = options.playerState || {};
     this.playerMeta = options.playerMeta || {};
+
     const data = await this.post("/api/lobbies/join", options);
-    this.saveSessionToken(data.sessionToken);
+    this.saveSession({
+      sessionToken: data.sessionToken,
+      lobbyId: data.lobby.lobbyId,
+    });
     this.snapshot = data.lobby;
     this.onSnapshot(this.snapshot);
     await this.connectSocket();
@@ -76,9 +103,11 @@ export class MultiplayerClient {
   }
 
   async restore() {
-    if (!this.sessionToken) return null;
+    if (!this.session) return null;
+
     const data = await this.post("/api/lobbies/restore", {
-      sessionToken: this.sessionToken,
+      sessionToken: this.session.sessionToken,
+      lobbyId: this.session.lobbyId,
     });
     this.snapshot = data.lobby;
     this.onSnapshot(this.snapshot);
@@ -87,43 +116,51 @@ export class MultiplayerClient {
   }
 
   async leave() {
-    if (!this.sessionToken) return;
-    await this.post("/api/lobbies/leave", { sessionToken: this.sessionToken });
+    if (!this.session) return;
+
+    await this.post("/api/lobbies/leave", {
+      sessionToken: this.session.sessionToken,
+      lobbyId: this.session.lobbyId,
+    });
     this.disconnectSocket();
-    this.saveSessionToken(null);
+    this.saveSession(null);
     this.snapshot = null;
   }
 
   async closeLobby() {
-    if (!this.sessionToken) throw new Error("No active session.");
-    await this.post("/api/lobbies/close", { sessionToken: this.sessionToken });
+    if (!this.session) throw new Error("No active session.");
+
+    await this.post("/api/lobbies/close", {
+      sessionToken: this.session.sessionToken,
+      lobbyId: this.session.lobbyId,
+    });
     this.disconnectSocket();
-    this.saveSessionToken(null);
+    this.saveSession(null);
     this.snapshot = null;
   }
 
   async kickPlayer(targetPlayerId) {
-    if (!this.sessionToken) throw new Error("No active session.");
+    if (!this.session) throw new Error("No active session.");
+
     await this.post("/api/lobbies/kick", {
-      sessionToken: this.sessionToken,
+      sessionToken: this.session.sessionToken,
+      lobbyId: this.session.lobbyId,
       targetPlayerId,
     });
   }
 
   async connectSocket() {
-    if (!this.sessionToken) throw new Error("No session token.");
+    if (!this.session) throw new Error("No session.");
+
     this.disconnectSocket();
 
     await new Promise((resolve, reject) => {
-      const socket = new WebSocket(`${this.wsBase}/ws`);
-      this.socket = socket;
+      const wsUrl = new URL(`${this.wsBase}/ws`);
+      wsUrl.searchParams.set("lobbyId", this.session.lobbyId);
+      wsUrl.searchParams.set("sessionToken", this.session.sessionToken);
 
-      socket.addEventListener("open", () => {
-        socket.send(JSON.stringify({
-          type: "auth",
-          sessionToken: this.sessionToken,
-        }));
-      });
+      const socket = new WebSocket(wsUrl.toString());
+      this.socket = socket;
 
       socket.addEventListener("message", (event) => {
         const message = JSON.parse(event.data);
@@ -171,12 +208,12 @@ export class MultiplayerClient {
 
   disconnectSocket() {
     this.stopPing();
-    if (this.socket) {
-      try {
-        this.socket.close();
-      } catch {}
-      this.socket = null;
-    }
+    if (!this.socket) return;
+
+    try {
+      this.socket.close();
+    } catch {}
+    this.socket = null;
   }
 
   startPing() {
@@ -189,39 +226,45 @@ export class MultiplayerClient {
   }
 
   stopPing() {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-      this.pingTimer = null;
-    }
+    if (!this.pingTimer) return;
+    clearInterval(this.pingTimer);
+    this.pingTimer = null;
   }
 
   pushState(nextState = {}, nextMeta = null) {
     this.playerState = { ...this.playerState, ...nextState };
-    if (nextMeta) this.playerMeta = { ...this.playerMeta, ...nextMeta };
+    if (nextMeta) {
+      this.playerMeta = { ...this.playerMeta, ...nextMeta };
+    }
 
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(
+      JSON.stringify({
         type: "state_update",
         state: this.playerState,
         meta: this.playerMeta,
-      }));
-    }
+      }),
+    );
   }
 
   sendChat(text) {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
-    this.socket.send(JSON.stringify({
-      type: "chat",
-      text: String(text || ""),
-    }));
+    this.socket.send(
+      JSON.stringify({
+        type: "chat",
+        text: String(text || ""),
+      }),
+    );
   }
 
-  sendCustom(type, payload = {}) {
+  sendCustom(customType, payload = {}) {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
-    this.socket.send(JSON.stringify({
-      type: "custom",
-      customType: type,
-      payload,
-    }));
+    this.socket.send(
+      JSON.stringify({
+        type: "custom",
+        customType,
+        payload,
+      }),
+    );
   }
 }
