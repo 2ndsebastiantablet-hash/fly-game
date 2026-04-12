@@ -1,0 +1,12 @@
+{
+  "name": "browser-game-multiplayer-template",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node backend/server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
