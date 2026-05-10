@@ -30,7 +30,6 @@ const mapSelectLabelEl = document.querySelector("#map-select-label");
 const mapNeighborhoodButton = document.querySelector("#map-neighborhood-button");
 const mapForestButton = document.querySelector("#map-forest-button");
 const mapCityButton = document.querySelector("#map-city-button");
-const mapCaveButton = document.querySelector("#map-cave-button");
 const playerColorLabelEl = document.querySelector("#player-color-label");
 const playerColorPickerEl = document.querySelector("#player-color-picker");
 const sessionTitleEl = document.querySelector("#session-title");
@@ -87,7 +86,6 @@ const labelledButtons = [
   mapNeighborhoodButton,
   mapForestButton,
   mapCityButton,
-  mapCaveButton,
 ];
 const defaultButtonLabels = new Map(
   labelledButtons.map((button) => [button, button?.textContent || ""])
@@ -130,6 +128,10 @@ scene.add(sun);
 const fillLight = new THREE.DirectionalLight(0xdff1ff, 0.35);
 fillLight.position.set(-80, 60, -40);
 scene.add(fillLight);
+
+const moonLight = new THREE.DirectionalLight(0xaec8ff, 0);
+moonLight.position.set(-70, 130, -120);
+scene.add(moonLight);
 
 const bodyLight = new THREE.PointLight(0xfff2c8, 0, 32, 2);
 bodyLight.position.set(0, 0.25, 0.15);
@@ -476,6 +478,39 @@ function paintHide(baseColor, veinColor = shadeHex(baseColor, 0.18), shadowColor
       context.stroke();
     }
     drawPixelNoise(context, size, cssHex(veinColor), 0.16, 32);
+  };
+}
+
+function paintCelestialDisc(baseColor, ringColor, glowColor) {
+  return (context, size) => {
+    context.clearRect(0, 0, size, size);
+    const center = size * 0.5;
+    const radius = size * 0.38;
+    const gradient = context.createRadialGradient(center, center, radius * 0.2, center, center, radius * 1.24);
+    gradient.addColorStop(0, cssHex(glowColor));
+    gradient.addColorStop(0.55, cssHex(baseColor));
+    gradient.addColorStop(0.78, cssHex(baseColor));
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(center, center, radius * 1.24, 0, Math.PI * 2);
+    context.fill();
+
+    context.strokeStyle = cssHex(ringColor);
+    context.lineWidth = 2;
+    for (let index = 0; index < 4; index += 1) {
+      context.globalAlpha = 0.18 + index * 0.08;
+      context.beginPath();
+      context.arc(
+        center + (index - 1.5) * 4,
+        center + Math.sin(index) * 5,
+        radius * (0.24 + index * 0.13),
+        0,
+        Math.PI * 2
+      );
+      context.stroke();
+    }
+    context.globalAlpha = 1;
   };
 }
 
@@ -936,17 +971,6 @@ const atmosphereProfiles = {
     shadow: 0.18,
     cloudsVisible: false,
   },
-  cave: {
-    background: 0x08080a,
-    fog: 0x0a0a0d,
-    fogNear: 12,
-    fogFar: 88,
-    hemi: 0.1,
-    sun: 0.02,
-    fill: 0.03,
-    shadow: 0.22,
-    cloudsVisible: false,
-  },
   outside: {
     background: 0x050707,
     fog: 0x070a08,
@@ -958,6 +982,22 @@ const atmosphereProfiles = {
     shadow: 0.2,
     cloudsVisible: false,
   },
+};
+
+const dayNightState = {
+  dayDuration: 600,
+  nightDuration: 300,
+  skyGroup: null,
+  stars: null,
+  sunSprite: null,
+  moonSprite: null,
+  lampLights: [],
+  skyColor: new THREE.Color(0xa7cdfd),
+  fogColor: new THREE.Color(0xa7cdfd),
+  nightSkyColor: new THREE.Color(0x22024f),
+  nightFogColor: new THREE.Color(0x2b155a),
+  moonLightColor: new THREE.Color(0xaec8ff),
+  windowLightColor: new THREE.Color(0xffd35c),
 };
 
 const network = {
@@ -1046,6 +1086,154 @@ function shuffle(rand, list) {
   }
 
   return copy;
+}
+
+function smoothstep(edge0, edge1, value) {
+  const t = THREE.MathUtils.clamp((value - edge0) / Math.max(edge1 - edge0, 0.0001), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function getDayNightPhase(elapsed) {
+  const totalDuration = dayNightState.dayDuration + dayNightState.nightDuration;
+  const cycleTime = ((elapsed % totalDuration) + totalDuration) % totalDuration;
+
+  if (cycleTime < dayNightState.dayDuration) {
+    const dayProgress = cycleTime / dayNightState.dayDuration;
+    return {
+      cycleTime,
+      dayProgress,
+      nightProgress: 0,
+      nightBlend: smoothstep(0.48, 1, dayProgress),
+      isNight: false,
+    };
+  }
+
+  const nightProgress = (cycleTime - dayNightState.dayDuration) / dayNightState.nightDuration;
+  return {
+    cycleTime,
+    dayProgress: 1,
+    nightProgress,
+    nightBlend: 1 - smoothstep(0.68, 1, nightProgress),
+    isNight: true,
+  };
+}
+
+function createCelestialSprite(texture, size, opacity = 1) {
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    depthTest: true,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(size, size, 1);
+  sprite.renderOrder = -10;
+  return sprite;
+}
+
+function initializeDayNightSky() {
+  const skyGroup = new THREE.Group();
+  skyGroup.name = "FlysWorldDayNightSky";
+  scene.add(skyGroup);
+
+  const rand = createRng(0x5da7c1e);
+  const positions = [];
+  const colors = [];
+  for (let index = 0; index < 720; index += 1) {
+    const angle = rand() * Math.PI * 2;
+    const elevation = THREE.MathUtils.lerp(0.22, 1.18, rand());
+    const radius = THREE.MathUtils.lerp(560, 820, rand());
+    positions.push(
+      Math.cos(angle) * Math.cos(elevation) * radius,
+      Math.sin(elevation) * radius,
+      Math.sin(angle) * Math.cos(elevation) * radius
+    );
+    const brightness = THREE.MathUtils.lerp(0.62, 1, rand());
+    colors.push(brightness, brightness, 1);
+  }
+
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  starGeometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  const starMaterial = new THREE.PointsMaterial({
+    size: 2.4,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  const stars = new THREE.Points(starGeometry, starMaterial);
+  stars.frustumCulled = false;
+  skyGroup.add(stars);
+
+  const sunTexture = createPixelCanvasTexture(96, paintCelestialDisc(0xffd86a, 0xf3a538, 0xfff0a8));
+  const moonTexture = createPixelCanvasTexture(96, paintCelestialDisc(0xeaf0ff, 0xa8b5d7, 0xffffff));
+  const sunSprite = createCelestialSprite(sunTexture, 78, 1);
+  const moonSprite = createCelestialSprite(moonTexture, 96, 0);
+  skyGroup.add(sunSprite);
+  skyGroup.add(moonSprite);
+
+  dayNightState.skyGroup = skyGroup;
+  dayNightState.stars = stars;
+  dayNightState.sunSprite = sunSprite;
+  dayNightState.moonSprite = moonSprite;
+}
+
+function updateNightMaterials(nightBlend) {
+  const windowMaterials = [materials.window, materials.carGlass, ...cityGlassMaterials];
+  for (const material of windowMaterials) {
+    if (!material?.emissive) {
+      continue;
+    }
+    if (!material.userData.dayEmissive) {
+      material.userData.dayEmissive = material.emissive.clone();
+      material.userData.dayEmissiveIntensity = material.emissiveIntensity || 0;
+    }
+    material.emissive.copy(material.userData.dayEmissive).lerp(dayNightState.windowLightColor, nightBlend);
+    material.emissiveIntensity = THREE.MathUtils.lerp(material.userData.dayEmissiveIntensity, 1.85, nightBlend);
+  }
+
+  if (!materials.lampBulb.userData.dayEmissive) {
+    materials.lampBulb.userData.dayEmissive = materials.lampBulb.emissive.clone();
+    materials.lampBulb.userData.dayEmissiveIntensity = materials.lampBulb.emissiveIntensity || 0;
+  }
+  materials.lampBulb.emissive.copy(materials.lampBulb.userData.dayEmissive).lerp(dayNightState.windowLightColor, nightBlend);
+  materials.lampBulb.emissiveIntensity = THREE.MathUtils.lerp(materials.lampBulb.userData.dayEmissiveIntensity, 2.4, nightBlend);
+
+  dayNightState.lampLights = dayNightState.lampLights.filter((lampLight) => lampLight.parent);
+  for (const lampLight of dayNightState.lampLights) {
+    lampLight.intensity = nightBlend * 1.45;
+    lampLight.distance = THREE.MathUtils.lerp(8, 17, nightBlend);
+  }
+}
+
+function updateDayNightSky(elapsed, nightBlend) {
+  if (!dayNightState.skyGroup) {
+    return;
+  }
+
+  const phase = getDayNightPhase(elapsed);
+  const dayProgress = phase.isNight ? 1 : phase.dayProgress;
+  dayNightState.skyGroup.position.copy(flyer.position);
+
+  const sunAngle = THREE.MathUtils.lerp(0.08, Math.PI - 0.08, dayProgress);
+  const sunRadius = 520;
+  const sunVector = tempWorldPositionA.set(
+    Math.cos(sunAngle) * sunRadius,
+    Math.sin(sunAngle) * 310 + 36,
+    -430
+  );
+  dayNightState.sunSprite.position.copy(sunVector);
+  dayNightState.sunSprite.material.opacity = Math.max(0, 1 - nightBlend * 1.18);
+
+  const moonVector = tempWorldPositionB.set(0, 345, -520);
+  dayNightState.moonSprite.position.copy(moonVector);
+  dayNightState.moonSprite.material.opacity = nightBlend;
+  dayNightState.stars.material.opacity = nightBlend * 0.92;
+
+  sun.position.copy(flyer.position).add(sunVector);
+  moonLight.position.copy(flyer.position).add(moonVector);
 }
 
 function setStatus(text) {
@@ -1390,9 +1578,6 @@ function getChunkRegion(cx, cz) {
 }
 
 function getRegionFallbackLabel(region) {
-  if (region === "cave") {
-    return "Cave Tunnels";
-  }
   if (region === "forest") {
     return "Skyshroud Forest";
   }
@@ -1409,10 +1594,6 @@ function getRegionFallbackLabel(region) {
 }
 
 function getMapSelectionId(position = flyer.position) {
-  if (isWorldPositionInCave(position)) {
-    return "cave";
-  }
-
   const region = getChunkRegion(getChunkCoord(position.x), getChunkCoord(position.z));
   if (region === "city" || region === "cityConnector") {
     return "city";
@@ -1424,19 +1605,6 @@ function getMapSelectionId(position = flyer.position) {
 }
 
 function getMapTeleportState(mapId) {
-  if (mapId === "cave") {
-    return caveState.portal?.destination
-      ? { ...caveState.portal.destination }
-      : {
-        x: 176,
-        y: caveLayout.tunnelY,
-        z: caveLayout.tunnelKeys.A.z,
-        yaw: -Math.PI * 0.5,
-        pitch: 0,
-        roll: 0,
-      };
-  }
-
   if (mapId === "forest") {
     const axisChunks = -(neighborhoodChunkRadius + 4);
     const lateralChunks = 2;
@@ -1474,7 +1642,6 @@ function updateMapPicker() {
     neighborhood: "Neighborhood",
     forest: "Forest",
     city: "City",
-    cave: "Cave",
   };
   mapSelectLabelEl.textContent = labels[activeId] || "Neighborhood";
 
@@ -1482,9 +1649,8 @@ function updateMapPicker() {
     [mapNeighborhoodButton, "neighborhood"],
     [mapForestButton, "forest"],
     [mapCityButton, "city"],
-    [mapCaveButton, "cave"],
   ]) {
-    button.classList.toggle("is-active", id === activeId);
+    button?.classList.toggle("is-active", id === activeId);
   }
 }
 
@@ -1555,15 +1721,7 @@ function getTunnelSegmentForPosition(position, padding = 0) {
 }
 
 function isWorldPositionInCave(position) {
-  if (!isWithinCaveBounds(position, 6)) {
-    return false;
-  }
-
-  return (
-    isPositionInsideCaveShaft(position) ||
-    isPositionInsideCaveCavern(position) ||
-    Boolean(getTunnelSegmentForPosition(position))
-  );
+  return false;
 }
 
 function isPlayerInCave() {
@@ -1571,9 +1729,6 @@ function isPlayerInCave() {
 }
 
 function getPlayerEnvironmentRegion() {
-  if (isPlayerInCave()) {
-    return "cave";
-  }
   return getChunkRegion(currentChunkX ?? 0, currentChunkZ ?? 0);
 }
 
@@ -1585,7 +1740,7 @@ function getCaveDistrictLabel(position = flyer.position) {
 }
 
 function chunkContainsCaveEntrance(cx, cz) {
-  return getChunkCoord(caveLayout.sinkhole.x) === cx && getChunkCoord(caveLayout.sinkhole.z) === cz;
+  return false;
 }
 
 function chunkContainsSinkhole(cx, cz) {
@@ -1618,56 +1773,49 @@ function getGroundEntranceVisualConfig() {
 }
 
 function isNearCaveEntranceWorld(x, z, radius = 0) {
-  const entry = getGroundEntranceVisualConfig();
-  const limit = entry.clearRadius + radius;
-  return (x - entry.x) ** 2 + (z - entry.z) ** 2 <= limit * limit;
+  return false;
 }
 
 function tryUseCavePortal(position) {
-  if (!caveState.portal || caveState.portalCooldown > 0 || isWorldPositionInCave(position)) {
-    return false;
-  }
-
-  const dx = position.x - caveState.portal.group.position.x;
-  const dy = position.y - caveState.portal.group.position.y;
-  const dz = position.z - caveState.portal.group.position.z;
-  if (dx * dx + dy * dy + dz * dz > caveState.portal.radius * caveState.portal.radius) {
-    return false;
-  }
-
-  caveState.portalCooldown = 1.1;
-  applyLocalSpawnState(caveState.portal.destination);
-  return true;
+  return false;
 }
 
-function updateAtmosphere(delta) {
+function updateAtmosphere(delta, elapsed) {
   const region = getPlayerEnvironmentRegion();
-  const profile = atmosphereProfiles[region];
+  const profile = atmosphereProfiles[region] || atmosphereProfiles.neighborhood;
+  const { nightBlend } = getDayNightPhase(elapsed);
+  const daylightScale = THREE.MathUtils.lerp(1, 0.34, nightBlend);
   const blend = 1 - Math.exp(-3.2 * delta);
 
-  atmosphereColor.set(profile.background);
-  scene.background.lerp(atmosphereColor, blend);
+  dayNightState.skyColor
+    .set(profile.background)
+    .lerp(dayNightState.nightSkyColor, nightBlend * (region === "forest" ? 0.28 : 0.92));
+  scene.background.lerp(dayNightState.skyColor, blend);
 
-  atmosphereColor.set(profile.fog);
-  scene.fog.color.lerp(atmosphereColor, blend);
+  dayNightState.fogColor
+    .set(profile.fog)
+    .lerp(dayNightState.nightFogColor, nightBlend * (region === "forest" ? 0.22 : 0.74));
+  scene.fog.color.lerp(dayNightState.fogColor, blend);
   scene.fog.near = THREE.MathUtils.lerp(scene.fog.near, profile.fogNear, blend);
   scene.fog.far = THREE.MathUtils.lerp(scene.fog.far, profile.fogFar, blend);
-  hemi.intensity = THREE.MathUtils.lerp(hemi.intensity, profile.hemi, blend);
-  sun.intensity = THREE.MathUtils.lerp(sun.intensity, profile.sun, blend);
-  fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, profile.fill, blend);
-  groundShadow.material.opacity = THREE.MathUtils.lerp(groundShadow.material.opacity, profile.shadow, blend);
+  hemi.intensity = THREE.MathUtils.lerp(hemi.intensity, profile.hemi * daylightScale + nightBlend * 0.18, blend);
+  sun.intensity = THREE.MathUtils.lerp(sun.intensity, profile.sun * Math.max(0, 1 - nightBlend * 1.1), blend);
+  moonLight.intensity = THREE.MathUtils.lerp(moonLight.intensity, nightBlend * (region === "forest" ? 0.18 : 0.55), blend);
+  fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, profile.fill * daylightScale + nightBlend * 0.06, blend);
+  groundShadow.material.opacity = THREE.MathUtils.lerp(groundShadow.material.opacity, profile.shadow + nightBlend * 0.12, blend);
+  updateNightMaterials(nightBlend);
+  updateDayNightSky(elapsed, nightBlend);
 
   for (const cloud of cloudActors) {
     if (cloud.group) {
-      cloud.group.visible = profile.cloudsVisible;
+      cloud.group.visible = profile.cloudsVisible && nightBlend < 0.82;
     }
   }
 }
 
 function updateBodyLight(delta) {
   const region = getPlayerEnvironmentRegion();
-  const inSinkhole = isPositionInsideCaveShaft(flyer.position, 0.12);
-  const isVeryDark = region === "cave" || inSinkhole;
+  const isVeryDark = false;
   const isDimForest = region === "forest";
   const targetIntensity = isVeryDark ? 2.4 : isDimForest ? 0.7 : 0;
   const targetDistance = isVeryDark ? 34 : isDimForest ? 18 : 10;
@@ -2778,11 +2926,6 @@ function hasVisibilityBlockerBetween(start, end, padding = 0.2) {
       }
     }
   }
-  for (const box of caveState.visibilityBlockers) {
-    if (segmentIntersectsBox(start, end, box, padding)) {
-      return true;
-    }
-  }
   return false;
 }
 
@@ -2852,6 +2995,10 @@ function createLamp(parent, x, z) {
   createCylinder(lamp, materials.lampPole, 0, 3.4, 0, 0.14, 6.8);
   createBox(lamp, materials.lampPole, 0.55, 6.6, 0, 1.1, 0.12, 0.12);
   createSphere(lamp, materials.lampBulb, 1.02, 6.22, 0, 0.2, { receive: false });
+  const lampLight = new THREE.PointLight(0xffd35c, 0, 10, 1.9);
+  lampLight.position.set(1.02, 6.05, 0);
+  lamp.add(lampLight);
+  dayNightState.lampLights.push(lampLight);
 
   return lamp;
 }
@@ -5951,10 +6098,6 @@ function createChunkGroundWithSinkhole(chunk, material) {
 
 function createChunkBase(chunk, rand) {
   const grassMaterial = rand() > 0.5 ? materials.grassA : materials.grassB;
-  if (chunkContainsCaveEntrance(chunk.cx, chunk.cz)) {
-    createPatch(chunk.group, grassMaterial, 0, 0, chunkSize, chunkSize, 0);
-    return;
-  }
   createPatch(chunk.group, grassMaterial, 0, 0, chunkSize, chunkSize, 0);
 
   createPatch(chunk.group, materials.road, -halfChunk + roadHalfWidth / 2, 0, roadHalfWidth, chunkSize, 0.015);
@@ -6488,11 +6631,6 @@ function populateLife(chunk, rand) {
     return;
   }
 
-  if (chunk.type === "Cave Entrance") {
-    createBird(chunk, rand);
-    return;
-  }
-
   const walkers = isForestChunk
     ? 0
     : chunk.type === "Park Loop"
@@ -6575,21 +6713,17 @@ function createChunk(cx, cz) {
   } else {
     createChunkBase(chunk, rand);
 
-    if (chunkContainsCaveEntrance(cx, cz)) {
-      chunk.type = "Cave Entrance";
+    const roll = rand();
+    if (roll < 0.16) {
+      fillParkChunk(chunk, rand);
+    } else if (roll < 0.28) {
+      fillCivicChunk(chunk, rand);
+    } else if (roll < 0.42) {
+      fillApartmentChunk(chunk, rand);
+    } else if (roll < 0.56) {
+      fillMarketChunk(chunk, rand);
     } else {
-      const roll = rand();
-      if (roll < 0.16) {
-        fillParkChunk(chunk, rand);
-      } else if (roll < 0.28) {
-        fillCivicChunk(chunk, rand);
-      } else if (roll < 0.42) {
-        fillApartmentChunk(chunk, rand);
-      } else if (roll < 0.56) {
-        fillMarketChunk(chunk, rand);
-      } else {
-        fillResidentialChunk(chunk, rand);
-      }
+      fillResidentialChunk(chunk, rand);
     }
   }
 
@@ -6629,17 +6763,13 @@ function trimChunkBuildQueue(neededKeys, centerX = currentChunkX, centerZ = curr
 }
 
 function refreshWorldStats(centerX = currentChunkX, centerZ = currentChunkZ) {
-  if (isPlayerInCave()) {
-    lastKnownDistrict = getCaveDistrictLabel(flyer.position);
+  const currentChunk = chunks.get(`${centerX},${centerZ}`);
+  if (currentChunk) {
+    lastKnownDistrict = currentChunk.type;
   } else {
-    const currentChunk = chunks.get(`${centerX},${centerZ}`);
-    if (currentChunk) {
-      lastKnownDistrict = currentChunk.type;
-    } else {
-      lastKnownDistrict = getRegionFallbackLabel(getChunkRegion(centerX, centerZ));
-    }
+    lastKnownDistrict = getRegionFallbackLabel(getChunkRegion(centerX, centerZ));
   }
-  activeLifeCount = [...chunks.values()].reduce((sum, chunk) => sum + chunk.actors.length, 0) + caveState.worms.length;
+  activeLifeCount = [...chunks.values()].reduce((sum, chunk) => sum + chunk.actors.length, 0);
 }
 
 function drainChunkBuildQueue() {
@@ -6785,11 +6915,6 @@ function resolveCollisions(position) {
     }
   }
 
-  if (isWithinCaveBounds(position, 18) || isWithinCaveAccess(position, 6)) {
-    collided = resolveCollisionBoxes(position, caveState.colliders) || collided;
-    collided = resolveCollisionBoxes(position, caveState.worms.map((worm) => worm.collider)) || collided;
-  }
-
   return collided;
 }
 
@@ -6863,23 +6988,11 @@ function updateFlight(delta, elapsed) {
   velocity.clampLength(0, maxSpeed);
 
   nextPosition.copy(flyer.position).addScaledVector(velocity, delta);
-  const caveAccessible = isWithinCaveAccess(nextPosition, 1.2) || isWorldPositionInCave(nextPosition);
-  const minY = caveAccessible ? caveLayout.bounds.minY : 1.2;
-  nextPosition.y = THREE.MathUtils.clamp(nextPosition.y, minY, 48);
-
-  const tunnelSegment = getTunnelSegmentForPosition(nextPosition, 0.18);
-  if (tunnelSegment) {
-    nextPosition.y = THREE.MathUtils.lerp(nextPosition.y, tunnelSegment.centerY, 0.74);
-    if (tunnelSegment.axis === "x") {
-      nextPosition.z = THREE.MathUtils.lerp(nextPosition.z, tunnelSegment.centerZ, 0.18);
-    } else {
-      nextPosition.x = THREE.MathUtils.lerp(nextPosition.x, tunnelSegment.centerX, 0.18);
-    }
-  }
+  nextPosition.y = THREE.MathUtils.clamp(nextPosition.y, 1.2, 48);
 
   const collided = resolveCollisions(nextPosition);
 
-  if (!caveAccessible && nextPosition.y <= 1.21) {
+  if (nextPosition.y <= 1.21) {
     nextPosition.y = 1.2;
     velocity.y = Math.max(velocity.y, 0);
   }
@@ -6889,11 +7002,6 @@ function updateFlight(delta, elapsed) {
   }
 
   flyer.position.copy(nextPosition);
-  if (tryUseCavePortal(flyer.position)) {
-    camera.position.set(0, 0, 0);
-    camera.rotation.set(pitch, yaw, roll);
-    return;
-  }
 
   shakeTime += delta * (12 + velocity.length() * 0.6 + sprintBlend * 18);
   const shakeStrength = 0.0038 + sprintBlend * 0.026 + fearShake * 0.028;
@@ -6923,7 +7031,6 @@ function updateActors(delta, elapsed) {
     }
   }
 
-  updateCaveActors(delta, elapsed);
   updateForestMonster(delta, elapsed);
 }
 
@@ -6943,9 +7050,7 @@ function updateRemotePlayerViews(delta, elapsed) {
 
 function updateHud() {
   const staminaPercent = (stamina / maxStamina) * 100;
-  const districtName = isPlayerInCave() ? getCaveDistrictLabel(flyer.position) : lastKnownDistrict;
-
-  districtEl.textContent = districtName;
+  districtEl.textContent = lastKnownDistrict;
   speedEl.textContent = velocity.length().toFixed(1);
   altitudeEl.textContent = flyer.position.y.toFixed(1);
   lifeCountEl.textContent = `${activeLifeCount} active`;
@@ -6985,7 +7090,7 @@ function animate() {
     syncChunks();
   }
 
-  updateAtmosphere(delta);
+  updateAtmosphere(delta, elapsed);
   updateBodyLight(delta);
   drainChunkBuildQueue();
   updateFlight(delta, elapsed);
@@ -7298,9 +7403,6 @@ mapForestButton.addEventListener("click", () => {
 mapCityButton.addEventListener("click", () => {
   teleportToMap("city");
 });
-mapCaveButton.addEventListener("click", () => {
-  teleportToMap("cave");
-});
 
 renderer.domElement.addEventListener("click", () => {
   getForestAudioContext();
@@ -7408,13 +7510,13 @@ for (let index = 0; index < 12; index += 1) {
   createCloud(index);
 }
 
+initializeDayNightSky();
 setVisibilityMode("public");
 showMenu("home");
 renderPlayerColorPicker();
 setPlayerColor(network.playerColor, false);
 startBrowserRefresh();
 refreshPublicServers(true);
-initializeCaveSystem();
 syncChunks();
 resetSessionUi();
 updateHud();
