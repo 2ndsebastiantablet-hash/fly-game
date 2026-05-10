@@ -350,6 +350,135 @@ function paintSign(baseColor, textColor, text) {
   };
 }
 
+function paintSpeckled(baseColor, accentColor = shadeHex(baseColor, 0.16), darkColor = shadeHex(baseColor, -0.18)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    drawPixelNoise(context, size, cssHex(accentColor), 0.22, 34);
+    drawPixelNoise(context, size, cssHex(darkColor), 0.2, 26);
+  };
+}
+
+function paintDither(baseColor, accentColor = shadeHex(baseColor, 0.18), darkColor = shadeHex(baseColor, -0.2)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 4) {
+      for (let x = (y / 4) % 2 === 0 ? 0 : 4; x < size; x += 8) {
+        context.fillStyle = (x + y) % 16 === 0 ? cssHex(accentColor) : cssHex(darkColor);
+        context.fillRect(x, y, 3, 3);
+      }
+    }
+  };
+}
+
+function paintCloth(baseColor, stripeColor = shadeHex(baseColor, -0.26), highlightColor = shadeHex(baseColor, 0.16)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    context.fillStyle = cssHex(stripeColor);
+    for (let x = 6; x < size; x += 14) {
+      context.fillRect(x, 0, 2, size);
+    }
+    for (let y = 8; y < size; y += 16) {
+      context.fillRect(0, y, size, 1);
+    }
+    context.fillStyle = cssHex(highlightColor);
+    for (let x = 2; x < size; x += 16) {
+      context.fillRect(x, 2, 4, 2);
+    }
+  };
+}
+
+function paintFur(baseColor, stripeColor = shadeHex(baseColor, -0.22), highlightColor = shadeHex(baseColor, 0.13)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    context.strokeStyle = cssHex(stripeColor);
+    context.lineWidth = 2;
+    for (let y = 2; y < size; y += 8) {
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(size, y + ((y / 8) % 2 ? -4 : 4));
+      context.stroke();
+    }
+    drawPixelNoise(context, size, cssHex(highlightColor), 0.14, 30);
+  };
+}
+
+function paintLeaves(baseColor, accentColor = shadeHex(baseColor, 0.14), darkColor = shadeHex(baseColor, -0.22)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 8) {
+      for (let x = 0; x < size; x += 8) {
+        context.fillStyle = ((x + y) / 8) % 2 === 0 ? cssHex(accentColor) : cssHex(darkColor);
+        context.fillRect(x + 1, y + 2, 5, 3);
+        context.fillRect(x + 3, y, 2, 7);
+      }
+    }
+  };
+}
+
+function paintBark(baseColor, darkColor = shadeHex(baseColor, -0.24), highlightColor = shadeHex(baseColor, 0.12)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    context.fillStyle = cssHex(darkColor);
+    for (let x = 2; x < size; x += 9) {
+      context.fillRect(x, 0, 3, size);
+      context.fillRect(x + 3, (x * 3) % size, 2, 10);
+    }
+    context.fillStyle = cssHex(highlightColor);
+    for (let x = 5; x < size; x += 13) {
+      context.fillRect(x, 4, 2, size - 8);
+    }
+  };
+}
+
+function paintVehicle(baseColor, stripeColor = shadeHex(baseColor, -0.28), highlightColor = shadeHex(baseColor, 0.28)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    context.fillStyle = cssHex(stripeColor);
+    context.fillRect(0, size * 0.62, size, 5);
+    context.fillRect(0, size * 0.12, size, 2);
+    context.fillStyle = cssHex(highlightColor);
+    context.fillRect(4, 5, size - 8, 4);
+    for (let x = 8; x < size; x += 18) {
+      context.fillRect(x, size * 0.36, 8, 3);
+    }
+  };
+}
+
+function paintCloud(baseColor = 0xf2f6ff, shadowColor = 0xaebbd0) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    context.fillStyle = cssHex(shadowColor);
+    for (let y = size * 0.58; y < size; y += 6) {
+      context.fillRect(0, y, size, 3);
+    }
+    drawPixelNoise(context, size, cssHex(0xffffff), 0.25, 18);
+  };
+}
+
+function paintHide(baseColor, veinColor = shadeHex(baseColor, 0.18), shadowColor = shadeHex(baseColor, -0.24)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    context.strokeStyle = cssHex(shadowColor);
+    context.lineWidth = 2;
+    for (let y = 4; y < size; y += 12) {
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(size, y + 8);
+      context.stroke();
+    }
+    drawPixelNoise(context, size, cssHex(veinColor), 0.16, 32);
+  };
+}
+
 function createFaceMaterials({ right, left, top, bottom, front, back }) {
   return [right, left, top, bottom, front, back];
 }
@@ -511,6 +640,41 @@ materials.caveRock = createRetroMaterial(0x3a332f, paintBrick(0x3a332f, 0x211c1a
 materials.caveRockDark = createRetroMaterial(0x231f1d, paintMetalPanels(0x231f1d, 0x5e5147), { size: 64 });
 materials.caveRockShell = createRetroMaterial(0x231f1d, paintMetalPanels(0x231f1d, 0x5e5147), { size: 64, side: THREE.DoubleSide });
 materials.asphaltLot = createRetroMaterial(0x595f66, paintConcrete(0x595f66), { size: 64 });
+materials.grassA = createRetroMaterial(0x7fbf63, paintDither(0x7fbf63, 0x99d973, 0x5a9847), { size: 64 });
+materials.grassB = createRetroMaterial(0x74b15c, paintDither(0x74b15c, 0x8fcd70, 0x4e8841), { size: 64 });
+materials.forestGroundA = createRetroMaterial(0x162214, paintSpeckled(0x162214, 0x253c21, 0x0b1209), { size: 64 });
+materials.forestGroundB = createRetroMaterial(0x1b2817, paintSpeckled(0x1b2817, 0x2c4326, 0x0f170d), { size: 64 });
+materials.road = createRetroMaterial(0x424a52, paintConcrete(0x424a52), { size: 64 });
+materials.sidewalk = createRetroMaterial(0xbec5bf, paintConcrete(0xbec5bf), { size: 64 });
+materials.path = createRetroMaterial(0xcaa97c, paintSpeckled(0xcaa97c, 0xe0c293, 0x8f6e48), { size: 64 });
+materials.bark = createRetroMaterial(0x7a5439, paintBark(0x7a5439), { size: 64 });
+materials.foliageA = createRetroMaterial(0x5ea453, paintLeaves(0x5ea453, 0x7cc76f, 0x3d7537), { size: 64 });
+materials.foliageB = createRetroMaterial(0x6cb663, paintLeaves(0x6cb663, 0x89d77a, 0x468c42), { size: 64 });
+materials.foliageC = createRetroMaterial(0x497f43, paintLeaves(0x497f43, 0x67a65d, 0x2d562b), { size: 64 });
+materials.forestFoliageA = createRetroMaterial(0x1d4520, paintLeaves(0x1d4520, 0x2d6330, 0x0e2812), { size: 64 });
+materials.forestFoliageB = createRetroMaterial(0x16391b, paintLeaves(0x16391b, 0x28562a, 0x0a1d0c), { size: 64 });
+materials.forestFoliageC = createRetroMaterial(0x102c16, paintLeaves(0x102c16, 0x214920, 0x071508), { size: 64 });
+materials.forestPlantA = createRetroMaterial(0x284a22, paintLeaves(0x284a22, 0x3d6833, 0x152814), { size: 64 });
+materials.forestPlantB = createRetroMaterial(0x355a28, paintLeaves(0x355a28, 0x507a3a, 0x1d3218), { size: 64 });
+materials.forestPlantC = createRetroMaterial(0x456b31, paintLeaves(0x456b31, 0x659044, 0x273f1f), { size: 64 });
+materials.hedge = createRetroMaterial(0x4b8b45, paintLeaves(0x4b8b45, 0x70b262, 0x2d5f2e), { size: 64 });
+materials.flower = createRetroMaterial(0xff7f8a, paintDither(0xff7f8a, 0xffc35f, 0xc14663), { size: 64 });
+materials.forestLeaf = createRetroMaterial(0x425b2e, paintLeaves(0x425b2e, 0x667842, 0x26351b), { size: 64, side: THREE.DoubleSide });
+materials.forestCloth = createRetroMaterial(0x6a6662, paintCloth(0x6a6662, 0x3d3b38, 0x96908a), { size: 64 });
+materials.forestClothDark = createRetroMaterial(0x2f3436, paintCloth(0x2f3436, 0x16191b, 0x596064), { size: 64 });
+materials.ash = createRetroMaterial(0x2a2b28, paintSpeckled(0x2a2b28, 0x4a4a43, 0x121311), { size: 64 });
+materials.blood = createRetroMaterial(0x5f0d12, paintSpeckled(0x5f0d12, 0x9d1b20, 0x270306), { size: 64 });
+materials.bone = createRetroMaterial(0xe5dfcf, paintSpeckled(0xe5dfcf, 0xfff7df, 0xaaa086), { size: 64 });
+materials.benchWood = createRetroMaterial(0x8b6640, paintBark(0x8b6640, 0x57391f, 0xb18458), { size: 64 });
+materials.lampPole = createRetroMaterial(0x4e555d, paintMetalPanels(0x4e555d, 0xd7e0e8), { size: 64 });
+materials.coneOrange = createRetroMaterial(0xf9722a, paintVehicle(0xf9722a, 0x2a211c, 0xffb653), { size: 64 });
+materials.cautionTape = createRetroMaterial(0xf6d22f, paintMetalPanels(0xf6d22f, 0x1c1714), { size: 64 });
+materials.cautionStripe = createRetroMaterial(0x1c1714, paintMetalPanels(0x1c1714, 0xf6d22f), { size: 64 });
+materials.water = createRetroMaterial(0x71bbd7, paintDither(0x71bbd7, 0xb7f4ff, 0x2d7896), { size: 64, roughness: 0.28, metalness: 0.08 });
+materials.playSet = createRetroMaterial(0xd7574a, paintVehicle(0xd7574a, 0x7b2a25, 0xff9286), { size: 64 });
+materials.playAccent = createRetroMaterial(0x3f77cf, paintVehicle(0x3f77cf, 0x1c3f82, 0x8fc2ff), { size: 64 });
+materials.lampBulb = createRetroMaterial(0xfff4c5, paintDither(0xfff4c5, 0xffffff, 0xffd15c), { size: 64, emissive: 0xffe89a, emissiveIntensity: 0.75 });
+materials.ember = createRetroMaterial(0xff8c4a, paintDither(0xff8c4a, 0xffe066, 0x9b2b16), { size: 64, emissive: 0xff5a18, emissiveIntensity: 0.85 });
 
 const retroSigns = {
   bank: createRetroMaterial(0x1c3559, paintSign(0x1c3559, 0xf0f7ff, "BANK"), { size: 128, emissive: 0x0b2444, emissiveIntensity: 0.12 }),
@@ -522,6 +686,9 @@ const retroSigns = {
 
 const retroWallDark = createRetroMaterial(0x424b59, paintMetalPanels(0x424b59, 0xffc94c), { size: 64 });
 const retroRoofVentMaterial = createRetroMaterial(0x3c4652, paintMetalPanels(0x3c4652, 0x9daab5), { size: 64 });
+const retroTireMaterial = createRetroMaterial(0x17191c, paintSpeckled(0x17191c, 0x3b4148, 0x050607), { size: 64 });
+const retroCloudMaterial = createRetroMaterial(0xf2f6ff, paintCloud(0xf2f6ff, 0xaebbd0), { size: 64, transparent: true, opacity: 0.9, roughness: 1 });
+const retroLimoMaterial = createRetroMaterial(0x17171a, paintVehicle(0x17171a, 0x050507, 0x4c4c55), { size: 64, roughness: 0.7 });
 
 const trashMaterials = [
   new THREE.MeshStandardMaterial({ color: 0xb9b4ad, roughness: 0.98 }),
@@ -554,6 +721,72 @@ const skinMaterials = [
   new THREE.MeshStandardMaterial({ color: 0x9b6445, roughness: 0.92 }),
   new THREE.MeshStandardMaterial({ color: 0x6f4732, roughness: 0.92 }),
 ];
+
+carMaterials[0] = createRetroMaterial(0xd94f43, paintVehicle(0xd94f43, 0x7e2424, 0xff9483), { size: 64, roughness: 0.78 });
+carMaterials[1] = createRetroMaterial(0x4b75d3, paintVehicle(0x4b75d3, 0x1e3e87, 0xaad2ff), { size: 64, roughness: 0.78 });
+carMaterials[2] = createRetroMaterial(0xe0b54c, paintVehicle(0xe0b54c, 0x7a5c18, 0xffdf73), { size: 64, roughness: 0.78 });
+carMaterials[3] = createRetroMaterial(0xf2f2f2, paintVehicle(0xf2f2f2, 0x9aa2aa, 0xffffff), { size: 64, roughness: 0.78 });
+
+trashMaterials[0] = createRetroMaterial(0xb9b4ad, paintSpeckled(0xb9b4ad, 0xe4dfd4, 0x726f6a), { size: 64 });
+trashMaterials[1] = createRetroMaterial(0x807d7a, paintSpeckled(0x807d7a, 0xa7a19a, 0x3d3c3a), { size: 64 });
+trashMaterials[2] = createRetroMaterial(0x5a6168, paintMetalPanels(0x5a6168, 0xc0c9d2), { size: 64 });
+
+suitMaterials[0] = createRetroMaterial(0x262d38, paintCloth(0x262d38, 0x11151d, 0x4a5665), { size: 64 });
+suitMaterials[1] = createRetroMaterial(0x3f4652, paintCloth(0x3f4652, 0x202630, 0x697483), { size: 64 });
+suitMaterials[2] = createRetroMaterial(0x4e4747, paintCloth(0x4e4747, 0x282323, 0x756c6c), { size: 64 });
+
+shirtMaterials[0] = createRetroMaterial(0x3f7fbe, paintCloth(0x3f7fbe, 0x1d4c80, 0x75b7ef), { size: 64 });
+shirtMaterials[1] = createRetroMaterial(0xe87f5a, paintCloth(0xe87f5a, 0x9d4630, 0xffb083), { size: 64 });
+shirtMaterials[2] = createRetroMaterial(0x5f9f5b, paintCloth(0x5f9f5b, 0x346b34, 0x8dce80), { size: 64 });
+shirtMaterials[3] = createRetroMaterial(0x8b62c3, paintCloth(0x8b62c3, 0x4f377f, 0xc39cff), { size: 64 });
+
+pantsMaterials[0] = createRetroMaterial(0x394253, paintCloth(0x394253, 0x1b2230, 0x5d6b82), { size: 64 });
+pantsMaterials[1] = createRetroMaterial(0x54514d, paintCloth(0x54514d, 0x2c2926, 0x7b756e), { size: 64 });
+pantsMaterials[2] = createRetroMaterial(0x5b4d67, paintCloth(0x5b4d67, 0x33283d, 0x857494), { size: 64 });
+
+skinMaterials[0] = createRetroMaterial(0xf1d2ba, paintSpeckled(0xf1d2ba, 0xffe4cf, 0xc79a7f), { size: 64 });
+skinMaterials[1] = createRetroMaterial(0xe1b994, paintSpeckled(0xe1b994, 0xf8cfaa, 0xa87755), { size: 64 });
+skinMaterials[2] = createRetroMaterial(0x9b6445, paintSpeckled(0x9b6445, 0xbb8060, 0x5d3726), { size: 64 });
+skinMaterials[3] = createRetroMaterial(0x6f4732, paintSpeckled(0x6f4732, 0x8d6147, 0x3c2419), { size: 64 });
+
+materials.squirrel = createRetroMaterial(0x9f6843, paintFur(0x9f6843, 0x603921, 0xd38d5b), { size: 64 });
+materials.animalBrown = createRetroMaterial(0x7a5a40, paintFur(0x7a5a40, 0x49301f, 0xa77a54), { size: 64 });
+materials.animalDarkBrown = createRetroMaterial(0x4f3829, paintFur(0x4f3829, 0x251911, 0x795840), { size: 64 });
+materials.animalGray = createRetroMaterial(0x70757d, paintFur(0x70757d, 0x414750, 0x9da4ad), { size: 64 });
+materials.animalDarkGray = createRetroMaterial(0x41464d, paintFur(0x41464d, 0x1f242a, 0x656c75), { size: 64 });
+materials.animalRed = createRetroMaterial(0xbf5a2e, paintFur(0xbf5a2e, 0x6f2d19, 0xee8651), { size: 64 });
+materials.animalCream = createRetroMaterial(0xe9dfc9, paintFur(0xe9dfc9, 0xb9aa8d, 0xfff6df), { size: 64 });
+materials.animalTan = createRetroMaterial(0xa98a61, paintFur(0xa98a61, 0x6d5434, 0xd4b681), { size: 64 });
+materials.animalMoose = createRetroMaterial(0x56412e, paintFur(0x56412e, 0x2c2016, 0x826346), { size: 64 });
+materials.animalBlack = createRetroMaterial(0x252423, paintFur(0x252423, 0x0c0c0b, 0x46433f), { size: 64 });
+materials.antler = createRetroMaterial(0xcab48b, paintBark(0xcab48b, 0x8f7650, 0xe8d0a2), { size: 64 });
+materials.quill = createRetroMaterial(0xd9d7d0, paintCloth(0xd9d7d0, 0x282623, 0xffffff), { size: 64 });
+materials.beak = createRetroMaterial(0xd0a254, paintDither(0xd0a254, 0xf1c877, 0x7a5722), { size: 64 });
+
+materials.insectShell = createRetroMaterial(0x364f2d, paintMetalPanels(0x364f2d, 0x9fb85c), { size: 64 });
+materials.insectAmber = createRetroMaterial(0x8b5f1e, paintDither(0x8b5f1e, 0xd99a35, 0x4e3210), { size: 64 });
+materials.insectBlack = createRetroMaterial(0x1b1b19, paintSpeckled(0x1b1b19, 0x44423d, 0x080807), { size: 64 });
+materials.insectWing = createRetroMaterial(0xe3f2df, paintGlassGrid(0xe3f2df, 0x8aa89e), { size: 64, transparent: true, opacity: 0.58, side: THREE.DoubleSide, roughness: 0.3 });
+materials.butterflyBody = createRetroMaterial(0x23201e, paintSpeckled(0x23201e, 0x4c4640, 0x0d0b0a), { size: 64 });
+materials.butterflyWingA = createRetroMaterial(0xffc96c, paintDither(0xffc96c, 0xff6f7d, 0x7d4a16), { size: 64 });
+materials.butterflyWingB = createRetroMaterial(0x7cb2ff, paintDither(0x7cb2ff, 0xff7adf, 0x2a4b91), { size: 64 });
+materials.birdBody = createRetroMaterial(0xdee5ef, paintFur(0xdee5ef, 0x8d9aaa, 0xffffff), { size: 64 });
+materials.birdWing = createRetroMaterial(0x6a7584, paintFur(0x6a7584, 0x303945, 0x9eabba), { size: 64 });
+
+materials.monsterHide = createRetroMaterial(0x2e201c, paintHide(0x2e201c, 0x594034, 0x120b09), { size: 64 });
+materials.monsterMuscle = createRetroMaterial(0x5d3a31, paintHide(0x5d3a31, 0x9d6454, 0x2b1513), { size: 64 });
+materials.monsterHorn = createRetroMaterial(0xb59d81, paintBark(0xb59d81, 0x71614f, 0xe2c9a8), { size: 64 });
+materials.monsterTooth = createRetroMaterial(0xeae2d5, paintSpeckled(0xeae2d5, 0xffffff, 0xa99f8c), { size: 64 });
+materials.monsterMouth = createRetroMaterial(0x3d0b10, paintSpeckled(0x3d0b10, 0x71121a, 0x150205), { size: 64, emissive: 0x1a0306, emissiveIntensity: 0.35, roughness: 0.7 });
+materials.wormTunnelBody = createRetroMaterial(0x8b5f54, paintHide(0x8b5f54, 0xbe8172, 0x4a2f2a), { size: 64 });
+materials.wormTunnelFlesh = createRetroMaterial(0xd47d7d, paintHide(0xd47d7d, 0xffa0a0, 0x803b43), { size: 64 });
+materials.wormTunnelTooth = createRetroMaterial(0xf2e7dc, paintSpeckled(0xf2e7dc, 0xffffff, 0xbba995), { size: 64 });
+materials.motherHead = createRetroMaterial(0x342728, paintHide(0x342728, 0x5c3c40, 0x150d0f), { size: 64 });
+materials.snailBody = createRetroMaterial(0x7c8a68, paintHide(0x7c8a68, 0xaab98b, 0x4d5b3d), { size: 64 });
+materials.snailBodyDark = createRetroMaterial(0x566149, paintHide(0x566149, 0x77835e, 0x303827), { size: 64 });
+materials.snailShellOuter = createRetroMaterial(0x6b4c3a, paintBark(0x6b4c3a, 0x332318, 0x9b7258), { size: 64 });
+materials.snailShellBand = createRetroMaterial(0xc89b6e, paintBark(0xc89b6e, 0x8a6543, 0xebbd8c), { size: 64 });
+materials.snailShellInner = createRetroMaterial(0x9f6f52, paintBark(0x9f6f52, 0x5b3829, 0xd39a73), { size: 64 });
 
 const chunkSize = 80;
 const halfChunk = chunkSize / 2;
@@ -2816,10 +3049,12 @@ function createCar(parent, x, z, rotationY, rand, options = {}) {
 
   createBox(car, bodyMaterial, 0, 0.55, 0, 3.6, 0.7, 1.8);
   createBox(car, materials.carGlass, -0.15, 0.98, 0, 1.9, 0.55, 1.45, { receive: false });
-  createBox(car, materials.trim, -1.15, 0.42, 0.92, 0.28, 0.28, 0.12);
-  createBox(car, materials.trim, 1.15, 0.42, 0.92, 0.28, 0.28, 0.12);
-  createBox(car, materials.trim, -1.15, 0.42, -0.92, 0.28, 0.28, 0.12);
-  createBox(car, materials.trim, 1.15, 0.42, -0.92, 0.28, 0.28, 0.12);
+  createBox(car, retroTireMaterial, -1.15, 0.42, 0.92, 0.28, 0.28, 0.12);
+  createBox(car, retroTireMaterial, 1.15, 0.42, 0.92, 0.28, 0.28, 0.12);
+  createBox(car, retroTireMaterial, -1.15, 0.42, -0.92, 0.28, 0.28, 0.12);
+  createBox(car, retroTireMaterial, 1.15, 0.42, -0.92, 0.28, 0.28, 0.12);
+  createBox(car, materials.lampBulb, 1.83, 0.64, 0.46, 0.08, 0.16, 0.22, { cast: false, receive: false });
+  createBox(car, materials.lampBulb, 1.83, 0.64, -0.46, 0.08, 0.16, 0.22, { cast: false, receive: false });
 
   if (options.driver) {
     addDriverToCar(car, rand);
@@ -2840,8 +3075,9 @@ function createCityBus(parent, x, z, rotationY, rand, options = {}) {
   createBox(bus, materials.carGlass, 3.45, 1.35, 0, 0.12, 1.4, 1.5, { receive: false });
   createBox(bus, materials.trim, 0, 0.42, 1.1, 6.8, 0.2, 0.1);
   createBox(bus, materials.trim, 0, 0.42, -1.1, 6.8, 0.2, 0.1);
-  createBox(bus, materials.trim, -3.35, 0.42, 0, 0.12, 0.26, 2.0);
-  createBox(bus, materials.trim, 3.35, 0.42, 0, 0.12, 0.26, 2.0);
+  createBox(bus, retroTireMaterial, -3.35, 0.42, 0, 0.12, 0.26, 2.0);
+  createBox(bus, retroTireMaterial, 3.35, 0.42, 0, 0.12, 0.26, 2.0);
+  createBox(bus, retroSigns.warning, 0.8, 2.42, 1.12, 2.4, 0.38, 0.08, { cast: false, receive: false });
 
   if (options.driver !== false) {
     addDriverToCar(bus, rand);
@@ -2861,8 +3097,9 @@ function createCityTruck(parent, x, z, rotationY, rand, options = {}) {
   createBox(truck, materials.carGlass, -2.45, 1.5, 0, 1.2, 0.6, 1.7, { receive: false });
   createBox(truck, bodyMaterial, 1.45, 1.15, 0, 5.1, 2.1, 2.35);
   createBox(truck, materials.trim, 1.45, 2.35, 0, 5.2, 0.16, 2.4);
-  createBox(truck, materials.trim, -3.45, 0.42, 0, 0.14, 0.26, 2.05);
-  createBox(truck, materials.trim, 3.9, 0.42, 0, 0.14, 0.26, 2.05);
+  createBox(truck, retroTireMaterial, -3.45, 0.42, 0, 0.14, 0.26, 2.05);
+  createBox(truck, retroTireMaterial, 3.9, 0.42, 0, 0.14, 0.26, 2.05);
+  createBox(truck, retroSigns.warning, 1.45, 1.58, 1.22, 2.3, 0.5, 0.08, { cast: false, receive: false });
 
   if (options.driver !== false) {
     addDriverToCar(truck, rand);
@@ -2877,13 +3114,13 @@ function createLimo(parent, x, z, rotationY, rand, options = {}) {
   limo.rotation.y = rotationY;
   parent.add(limo);
 
-  const bodyMaterial = options.bodyMaterial || new THREE.MeshStandardMaterial({ color: 0x17171a, roughness: 0.7 });
+  const bodyMaterial = options.bodyMaterial || retroLimoMaterial;
   createBox(limo, bodyMaterial, 0, 0.62, 0, 7.4, 0.72, 1.9);
   createBox(limo, materials.carGlass, -0.25, 1.02, 0, 5.0, 0.48, 1.5, { receive: false });
   createBox(limo, materials.trim, 0, 0.4, 0.98, 6.8, 0.12, 0.08);
   createBox(limo, materials.trim, 0, 0.4, -0.98, 6.8, 0.12, 0.08);
-  createBox(limo, materials.trim, -3.3, 0.42, 0, 0.18, 0.24, 2);
-  createBox(limo, materials.trim, 3.3, 0.42, 0, 0.18, 0.24, 2);
+  createBox(limo, retroTireMaterial, -3.3, 0.42, 0, 0.18, 0.24, 2);
+  createBox(limo, retroTireMaterial, 3.3, 0.42, 0, 0.18, 0.24, 2);
 
   if (options.driver !== false) {
     addDriverToCar(limo, rand);
@@ -2920,6 +3157,7 @@ function createDumpster(parent, x, z, rotationY = 0) {
   createBox(dumpster, materials.trim, 0, 1.95, 0, 2.7, 0.12, 1.6, { rz: -0.08 });
   createBox(dumpster, materials.trim, -0.8, 0.4, 0.82, 0.24, 0.24, 0.18);
   createBox(dumpster, materials.trim, 0.8, 0.4, 0.82, 0.24, 0.24, 0.18);
+  createBox(dumpster, retroSigns.warning, 0, 1.08, 0.78, 1.6, 0.46, 0.08, { cast: false, receive: false });
 }
 
 function createRoadStripe(parent, x, z, width, depth, rotationY = 0) {
@@ -5279,7 +5517,7 @@ function createCloud(index) {
   for (let puff = 0; puff < puffs; puff += 1) {
     createSphere(
       cloud,
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.9 }),
+      retroCloudMaterial,
       (puff - puffs / 2) * 6,
       Math.sin(puff) * 1.6,
       Math.cos(puff) * 2,
