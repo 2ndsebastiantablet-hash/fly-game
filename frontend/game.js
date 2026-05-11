@@ -801,6 +801,11 @@ materials.havenGoldLeaf = createRetroMaterial(0xe0b64a, paintLeaves(0xe0b64a, 0x
 materials.havenWhiteBark = createRetroMaterial(0xf4f0df, paintBark(0xf4f0df, 0xb8b0a6, 0xffffff), { size: 64 });
 materials.havenBridge = createRetroMaterial(0xcda34a, paintMetalPanels(0xcda34a, 0xfff0aa), { size: 64, roughness: 0.42, metalness: 0.08 });
 materials.havenHand = createRetroMaterial(0xf0d4bf, paintHide(0xf0d4bf, 0xffead8, 0xbb8972), { size: 64, roughness: 0.72 });
+materials.havenCatwalk = createRetroMaterial(0x36323f, paintMetalPanels(0x36323f, 0xd64a4a), { size: 64, roughness: 0.62, metalness: 0.08 });
+materials.havenWire = createRetroMaterial(0x17151e, paintMetalPanels(0x17151e, 0x675c7e), { size: 64, roughness: 0.5, metalness: 0.16 });
+materials.havenRedSky = createRetroMaterial(0x5b1026, paintDither(0x5b1026, 0xb32339, 0x12060d), { size: 64, transparent: true, opacity: 0.72, emissive: 0x4a0819, emissiveIntensity: 0.35 });
+materials.havenEyeWhite = createRetroMaterial(0xe6d9cd, paintSpeckled(0xe6d9cd, 0xffffff, 0x8e7771), { size: 64 });
+materials.havenEyeIris = createRetroMaterial(0xb92f2f, paintDither(0xb92f2f, 0xff725e, 0x3b0711), { size: 64, emissive: 0x7f1016, emissiveIntensity: 0.42 });
 
 const retroSigns = {
   bank: createRetroMaterial(0x1c3559, paintSign(0x1c3559, 0xf0f7ff, "BANK"), { size: 128, emissive: 0x0b2444, emissiveIntensity: 0.12 }),
@@ -945,7 +950,7 @@ const sprintDrainPerSecond = 24;
 const staminaRegenPerSecond = 16;
 const havenLayout = Object.freeze({
   origin: { x: 0, y: 165, z: -2600 },
-  bounds: { minX: -230, maxX: 340, minY: 122, maxY: 250, minZ: -2840, maxZ: -2360 },
+  bounds: { minX: -340, maxX: 340, minY: 122, maxY: 250, minZ: -2840, maxZ: -2360 },
   spawn: { x: 0, y: 171, z: -2600, yaw: 0, pitch: -0.06, roll: 0 },
   cloudPortal: { x: -86, y: 43, z: -118, radius: 18 },
 });
@@ -5888,15 +5893,20 @@ function createSkyWaterfall(parent, x, z, height = 10) {
 
 function createPlanterHand(parent, x, z, phase = 0) {
   const hand = new THREE.Group();
-  hand.position.set(x, 3.4, z);
+  hand.position.set(x, 4.2, z);
   parent.add(hand);
   createBox(hand, materials.havenHand, 0, 0, 0, 1.6, 0.8, 2.0, { cast: false });
-  for (let index = 0; index < 5; index += 1) {
-    const finger = createBox(hand, materials.havenHand, -0.8 + index * 0.4, -0.58, 1.2, 0.22, 1.6, 0.24, { rx: 0.2, cast: false });
+  for (let index = 0; index < 4; index += 1) {
+    const finger = createBox(hand, materials.havenHand, -0.6 + index * 0.4, -0.58, 1.2, 0.22, 1.6, 0.24, { rx: 0.2, cast: false });
     finger.userData.phase = phase + index * 0.3;
   }
   createBox(hand, materials.havenHand, 1.1, -0.1, 0.1, 0.35, 0.55, 1.2, { rz: -0.55, cast: false });
-  havenState.planterHands.push({ group: hand, phase, homeY: hand.position.y });
+  const carriedPlant = new THREE.Group();
+  carriedPlant.position.set(0, -1.35, 1.35);
+  hand.add(carriedPlant);
+  createCylinder(carriedPlant, materials.forestPlantB, 0, 0.34, 0, 0.06, 0.68, { cast: false });
+  createSphere(carriedPlant, materials.flower, 0, 0.78, 0, 0.24, { cast: false, receive: false });
+  havenState.planterHands.push({ group: hand, carriedPlant, phase, homeY: hand.position.y, baseX: x, baseZ: z });
 }
 
 function createFloatingGardenPaths(parent) {
@@ -5904,6 +5914,12 @@ function createFloatingGardenPaths(parent) {
   garden.name = "HavenFloatingGardenPaths";
   garden.position.set(168, 5, 118);
   parent.add(garden);
+
+  createHavenBox(garden, materials.havenCloudGlow, 50, 33, 16, 176, 1.2, 122, { cast: false, receive: false });
+  createHavenBox(garden, materials.havenCloudGlow, -38, 15, 16, 1.2, 36, 122, { cast: false, receive: false });
+  createHavenBox(garden, materials.havenCloudGlow, 138, 15, 16, 1.2, 36, 122, { cast: false, receive: false });
+  createHavenBox(garden, materials.havenCloudGlow, 50, 15, -45, 176, 36, 1.2, { cast: false, receive: false });
+  createHavenBox(garden, materials.havenCloudGlow, 50, 15, 77, 176, 36, 1.2, { cast: false, receive: false });
 
   const islands = [
     { x: 0, z: 0, w: 34, d: 26, y: 0 },
@@ -5932,8 +5948,71 @@ function createFloatingGardenPaths(parent) {
   }
   createHavenBridge(garden, islands[0].x - 34, islands[0].z, islands[0].x - 8, islands[0].z, 0.7, 7);
 
-  createPlanterHand(garden, 20, -8, 0.4);
-  createPlanterHand(garden, 68, 26, 1.7);
+  createPlanterHand(garden, 10, -7, 0.4);
+  createPlanterHand(garden, 72, 14, 1.7);
+}
+
+function createCatwalkBridge(parent, fromX, fromZ, toX, toZ, y = 0.9, width = 4.4) {
+  const dx = toX - fromX;
+  const dz = toZ - fromZ;
+  const length = Math.hypot(dx, dz);
+  const angle = Math.atan2(dx, dz);
+  const x = (fromX + toX) * 0.5;
+  const z = (fromZ + toZ) * 0.5;
+  createHavenBox(parent, materials.havenCatwalk, x, y, z, width, 0.55, length, { ry: angle, cast: false });
+  for (const side of [-1, 1]) {
+    createBox(parent, materials.havenWire, x + Math.cos(angle) * width * 0.5 * side, y + 2.2, z - Math.sin(angle) * width * 0.5 * side, 0.16, 3.8, length, { ry: angle, cast: false });
+    for (let index = -Math.floor(length / 8); index <= Math.floor(length / 8); index += 1) {
+      createBox(parent, materials.havenWire, x + Math.cos(angle) * width * 0.5 * side + Math.sin(angle) * index * 8, y + 1.9, z - Math.sin(angle) * width * 0.5 * side + Math.cos(angle) * index * 8, 0.12, 3.2, 0.12, { cast: false });
+    }
+  }
+}
+
+function createWatcherEye(parent, x, y, z, scale = 1) {
+  const eye = new THREE.Group();
+  eye.position.set(x, y, z);
+  parent.add(eye);
+  createScaledSphere(eye, materials.havenEyeWhite, 0, 0, 0, 2.2 * scale, 1.2 * scale, 1.45 * scale, { cast: false, receive: false });
+  createSphere(eye, materials.havenEyeIris, 0, 0, 1.1 * scale, 0.54 * scale, { cast: false, receive: false });
+  createSphere(eye, materials.monsterMouth, 0, 0, 1.42 * scale, 0.18 * scale, { cast: false, receive: false });
+  return eye;
+}
+
+function createSkyBridgeNetwork(parent) {
+  const network = new THREE.Group();
+  network.name = "HavenSkyBridgeNetwork";
+  network.position.set(-172, 12, 118);
+  parent.add(network);
+
+  createHavenBox(network, materials.havenRedSky, -42, 27, 0, 178, 1.2, 126, { cast: false, receive: false });
+  createHavenBox(network, materials.havenRedSky, -131, 12, 0, 1.2, 32, 126, { cast: false, receive: false });
+  createHavenBox(network, materials.havenRedSky, 47, 12, 0, 1.2, 32, 126, { cast: false, receive: false });
+  createHavenBox(network, materials.havenRedSky, -42, 12, -63, 178, 32, 1.2, { cast: false, receive: false });
+  createHavenBox(network, materials.havenRedSky, -42, 12, 63, 178, 32, 1.2, { cast: false, receive: false });
+
+  const platforms = [
+    { x: 0, z: 0, w: 18, d: 18, y: 0 },
+    { x: -38, z: -26, w: 15, d: 15, y: 3 },
+    { x: -80, z: -6, w: 17, d: 17, y: 5 },
+    { x: -44, z: 34, w: 14, d: 14, y: 7 },
+    { x: 28, z: 32, w: 16, d: 16, y: 4 },
+  ];
+  for (const platform of platforms) {
+    createHavenBox(network, materials.havenCatwalk, platform.x, platform.y, platform.z, platform.w, 0.8, platform.d, { cast: false });
+    createHavenBox(network, materials.havenWire, platform.x, platform.y + 2.4, platform.z - platform.d * 0.5, platform.w, 3.8, 0.18, { cast: false });
+    createHavenBox(network, materials.havenWire, platform.x, platform.y + 2.4, platform.z + platform.d * 0.5, platform.w, 3.8, 0.18, { cast: false });
+  }
+  for (let index = 0; index < platforms.length - 1; index += 1) {
+    const from = platforms[index];
+    const to = platforms[index + 1];
+    createCatwalkBridge(network, from.x, from.z, to.x, to.z, (from.y + to.y) * 0.5 + 0.75, 4.4);
+  }
+  createCatwalkBridge(network, platforms[0].x + 18, platforms[0].z, 70, 0, 0.8, 5.4);
+
+  createWatcherEye(network, -35, 20, -36, 1.2);
+  createWatcherEye(network, -82, 22, 30, 0.95);
+  createWatcherEye(network, 28, 19, 45, 0.9);
+  createWatcherEye(network, -42, 30, 0, 3.2);
 }
 
 function createHavenMaze(parent) {
@@ -6093,7 +6172,9 @@ function initializeHavenRealm() {
   createHavenMaze(group);
   createHavenTower(group);
   createFloatingGardenPaths(group);
-  createHavenBridge(group, 85, 118, 134, 118, 0.7, 7.2);
+  createSkyBridgeNetwork(group);
+  createHavenBridge(group, 85, 118, 151, 118, 0.7, 7.2);
+  createHavenBridge(group, -85, 118, -154, 118, 0.8, 6.2);
   const ambient = new THREE.PointLight(0xfff2c8, 1.4, 120, 1.6);
   ambient.position.set(0, 28, 50);
   group.add(ambient);
@@ -6131,13 +6212,18 @@ function updateHavenSystem(delta, elapsed) {
     crystal.mesh.position.y += Math.sin(elapsed * 1.7 + crystal.phase) * 0.002;
   }
   for (const hand of havenState.planterHands) {
+    const travel = elapsed * 0.22 + hand.phase;
+    hand.group.position.x = hand.baseX + Math.sin(travel) * 9;
+    hand.group.position.z = hand.baseZ + Math.cos(travel * 0.8) * 6;
     const bob = Math.sin(elapsed * 1.4 + hand.phase);
-    hand.group.position.y = hand.homeY + bob * 0.7;
+    const grabCycle = (Math.sin(elapsed * 1.15 + hand.phase) + 1) * 0.5;
+    hand.group.position.y = hand.homeY + bob * 0.7 - smoothstep(0.55, 1, grabCycle) * 1.2;
     hand.group.rotation.z = Math.sin(elapsed * 0.9 + hand.phase) * 0.18;
     hand.group.rotation.x = Math.sin(elapsed * 1.7 + hand.phase) * 0.12;
+    hand.carriedPlant.visible = grabCycle > 0.42;
     hand.group.traverse((child) => {
       if (child.userData?.phase !== undefined) {
-        child.rotation.x = 0.2 + Math.sin(elapsed * 3.2 + child.userData.phase) * 0.38;
+        child.rotation.x = 0.2 + Math.sin(elapsed * 3.2 + child.userData.phase) * 0.38 + smoothstep(0.5, 1, grabCycle) * 0.55;
       }
     });
   }
