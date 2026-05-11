@@ -30,6 +30,7 @@ const mapSelectLabelEl = document.querySelector("#map-select-label");
 const mapNeighborhoodButton = document.querySelector("#map-neighborhood-button");
 const mapForestButton = document.querySelector("#map-forest-button");
 const mapCityButton = document.querySelector("#map-city-button");
+const mapHavenButton = document.querySelector("#map-haven-button");
 const playerColorLabelEl = document.querySelector("#player-color-label");
 const playerColorPickerEl = document.querySelector("#player-color-picker");
 const sessionTitleEl = document.querySelector("#session-title");
@@ -86,6 +87,7 @@ const labelledButtons = [
   mapNeighborhoodButton,
   mapForestButton,
   mapCityButton,
+  mapHavenButton,
 ];
 const defaultButtonLabels = new Map(
   labelledButtons.map((button) => [button, button?.textContent || ""])
@@ -185,6 +187,23 @@ function createPixelCanvasTexture(size, paint) {
   texture.minFilter = THREE.NearestFilter;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function createAlphaPixelCanvasTexture(size, paint) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d", { alpha: true });
+  context.imageSmoothingEnabled = false;
+  context.clearRect(0, 0, size, size);
+  paint(context, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
@@ -334,6 +353,62 @@ function paintConcrete(baseColor) {
       context.stroke();
     }
     drawPixelNoise(context, size, cssHex(shadeHex(baseColor, -0.22)), 0.2, 24);
+  };
+}
+
+function paintMarble(baseColor = 0xf4f0e4, veinColor = 0xb8b3cf, goldColor = 0xd8a83e) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    context.strokeStyle = cssHex(veinColor);
+    context.lineWidth = 2;
+    for (let index = 0; index < 7; index += 1) {
+      context.beginPath();
+      const startY = (index * 11 + 5) % size;
+      context.moveTo(0, startY);
+      for (let x = 0; x <= size; x += 8) {
+        context.lineTo(x, startY + Math.sin(x * 0.22 + index) * 5 + index);
+      }
+      context.stroke();
+    }
+    context.fillStyle = cssHex(goldColor);
+    for (let y = 0; y < size; y += 16) {
+      context.fillRect(0, y, size, 2);
+    }
+    drawPixelNoise(context, size, cssHex(shadeHex(baseColor, -0.12)), 0.12, 22);
+  };
+}
+
+function paintCloudStone(baseColor = 0xf6fbff, shadowColor = 0xb7c8e8, glowColor = 0xfff4b3) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    for (let y = 4; y < size; y += 12) {
+      context.fillStyle = cssHex(y % 24 === 4 ? shadowColor : shadeHex(baseColor, -0.05));
+      for (let x = 0; x < size; x += 16) {
+        context.fillRect(x + ((y / 12) % 2) * 8, y, 10, 3);
+      }
+    }
+    context.fillStyle = cssHex(glowColor);
+    for (let index = 0; index < 8; index += 1) {
+      context.fillRect((index * 13) % size, (index * 19) % size, 3, 3);
+    }
+  };
+}
+
+function paintSymbol(baseColor, symbolColor, accentColor = shadeHex(symbolColor, -0.2)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(0, 0, size, size);
+    context.strokeStyle = cssHex(symbolColor);
+    context.lineWidth = 4;
+    context.strokeRect(5, 5, size - 10, size - 10);
+    context.beginPath();
+    context.arc(size * 0.5, size * 0.5, size * 0.24, 0, Math.PI * 2);
+    context.stroke();
+    context.fillStyle = cssHex(accentColor);
+    context.fillRect(size * 0.48, size * 0.18, 4, size * 0.64);
+    context.fillRect(size * 0.18, size * 0.48, size * 0.64, 4);
   };
 }
 
@@ -710,6 +785,17 @@ materials.playSet = createRetroMaterial(0xd7574a, paintVehicle(0xd7574a, 0x7b2a2
 materials.playAccent = createRetroMaterial(0x3f77cf, paintVehicle(0x3f77cf, 0x1c3f82, 0x8fc2ff), { size: 64 });
 materials.lampBulb = createRetroMaterial(0xfff4c5, paintDither(0xfff4c5, 0xffffff, 0xffd15c), { size: 64, emissive: 0xffe89a, emissiveIntensity: 0.75 });
 materials.ember = createRetroMaterial(0xff8c4a, paintDither(0xff8c4a, 0xffe066, 0x9b2b16), { size: 64, emissive: 0xff5a18, emissiveIntensity: 0.85 });
+materials.havenMarble = createRetroMaterial(0xf2ede2, paintMarble(0xf2ede2, 0xb7bad8, 0xd5a53d), { size: 64, roughness: 0.42, metalness: 0.04 });
+materials.havenMarblePink = createRetroMaterial(0xf3dce9, paintMarble(0xf3dce9, 0xb4a0d8, 0xe0b354), { size: 64, roughness: 0.46 });
+materials.havenGold = createRetroMaterial(0xd8aa3f, paintMetalPanels(0xd8aa3f, 0xfff0a8), { size: 64, emissive: 0x8c5a11, emissiveIntensity: 0.24, roughness: 0.34, metalness: 0.18 });
+materials.havenCloud = createRetroMaterial(0xf6fbff, paintCloudStone(0xf6fbff, 0xb7c8e8, 0xfff4b3), { size: 64, emissive: 0x9eb6ff, emissiveIntensity: 0.1, roughness: 0.86 });
+materials.havenCloudGlow = createRetroMaterial(0xffffff, paintCloudStone(0xffffff, 0xd8e8ff, 0xfff5a8), { size: 64, transparent: true, opacity: 0.82, emissive: 0xbfd7ff, emissiveIntensity: 0.5, roughness: 0.72 });
+materials.havenHedge = createRetroMaterial(0x5da95c, paintLeaves(0x5da95c, 0x83d678, 0x2e7036), { size: 64, roughness: 0.96 });
+materials.havenGrass = createRetroMaterial(0x91d66e, paintDither(0x91d66e, 0xc7f48b, 0x5c9f49), { size: 64 });
+materials.havenSymbol = createRetroMaterial(0x2c2b68, paintSymbol(0x2c2b68, 0xffe88a, 0xff83d5), { size: 64, emissive: 0x5a3eff, emissiveIntensity: 0.55 });
+materials.havenCrystal = createRetroMaterial(0xcff6ff, paintGlassGrid(0xcff6ff, 0x6875ff), { size: 64, transparent: true, opacity: 0.72, emissive: 0x88cfff, emissiveIntensity: 0.9, roughness: 0.16 });
+materials.havenStatue = createRetroMaterial(0xd8d3c9, paintMarble(0xd8d3c9, 0x9c99a8, 0xc9a047), { size: 64, roughness: 0.62 });
+materials.havenDarkTrim = createRetroMaterial(0x403061, paintMetalPanels(0x403061, 0xe2b64e), { size: 64, roughness: 0.66 });
 
 const retroSigns = {
   bank: createRetroMaterial(0x1c3559, paintSign(0x1c3559, 0xf0f7ff, "BANK"), { size: 128, emissive: 0x0b2444, emissiveIntensity: 0.12 }),
@@ -852,6 +938,12 @@ const flyRadius = 0.56;
 const maxStamina = 100;
 const sprintDrainPerSecond = 24;
 const staminaRegenPerSecond = 16;
+const havenLayout = Object.freeze({
+  origin: { x: 0, y: 165, z: -2600 },
+  bounds: { minX: -230, maxX: 230, minY: 122, maxY: 245, minZ: -2840, maxZ: -2360 },
+  spawn: { x: 0, y: 171, z: -2600, yaw: 0, pitch: -0.06, roll: 0 },
+  cloudPortal: { x: -86, y: 43, z: -118, radius: 18 },
+});
 
 const clock = new THREE.Clock();
 const chunks = new Map();
@@ -886,6 +978,7 @@ let lastKnownDistrict = "Warm-Up";
 let activeLifeCount = 0;
 
 const worldSpawnState = Object.freeze({ x: 0, y: 3.8, z: 0, yaw: 0, pitch: -0.1, roll: 0 });
+const havenSpawnState = Object.freeze({ ...havenLayout.spawn });
 const caveLayout = Object.freeze({
   sinkhole: { x: 170, z: 109, radius: 1.85, shaftRadius: 1.12 },
   portal: { x: 170, y: 1.7, z: 109, radius: 0.72, triggerRadius: 1.02 },
@@ -971,6 +1064,17 @@ const atmosphereProfiles = {
     shadow: 0.18,
     cloudsVisible: false,
   },
+  haven: {
+    background: 0xd7cbff,
+    fog: 0xdccfff,
+    fogNear: 130,
+    fogFar: 520,
+    hemi: 1.38,
+    sun: 1.35,
+    fill: 0.62,
+    shadow: 0.08,
+    cloudsVisible: false,
+  },
   outside: {
     background: 0x050707,
     fog: 0x070a08,
@@ -1051,6 +1155,17 @@ const caveState = {
   portalCooldown: 0,
 };
 
+const havenState = {
+  initialized: false,
+  group: null,
+  colliders: [],
+  visibilityBlockers: [],
+  portalCloud: null,
+  portalCooldown: 0,
+  sparkleClouds: [],
+  chandelierCrystals: [],
+};
+
 displayNameInput.value = network.displayName;
 createLobbyNameInput.value = `${network.displayName}'s Lobby`;
 
@@ -1124,11 +1239,11 @@ function createCelestialSprite(texture, size, opacity = 1) {
     transparent: true,
     opacity,
     depthWrite: false,
-    depthTest: true,
+    depthTest: false,
   });
   const sprite = new THREE.Sprite(material);
   sprite.scale.set(size, size, 1);
-  sprite.renderOrder = -10;
+  sprite.renderOrder = 10;
   return sprite;
 }
 
@@ -1167,10 +1282,10 @@ function initializeDayNightSky() {
   stars.frustumCulled = false;
   skyGroup.add(stars);
 
-  const sunTexture = createPixelCanvasTexture(96, paintCelestialDisc(0xffd86a, 0xf3a538, 0xfff0a8));
-  const moonTexture = createPixelCanvasTexture(96, paintCelestialDisc(0xeaf0ff, 0xa8b5d7, 0xffffff));
-  const sunSprite = createCelestialSprite(sunTexture, 78, 1);
-  const moonSprite = createCelestialSprite(moonTexture, 96, 0);
+  const sunTexture = createAlphaPixelCanvasTexture(128, paintCelestialDisc(0xffd86a, 0xf3a538, 0xfff0a8));
+  const moonTexture = createAlphaPixelCanvasTexture(128, paintCelestialDisc(0xeaf0ff, 0xa8b5d7, 0xffffff));
+  const sunSprite = createCelestialSprite(sunTexture, 145, 1);
+  const moonSprite = createCelestialSprite(moonTexture, 170, 0);
   skyGroup.add(sunSprite);
   skyGroup.add(moonSprite);
 
@@ -1578,6 +1693,9 @@ function getChunkRegion(cx, cz) {
 }
 
 function getRegionFallbackLabel(region) {
+  if (region === "haven") {
+    return "Haven";
+  }
   if (region === "forest") {
     return "Skyshroud Forest";
   }
@@ -1594,6 +1712,10 @@ function getRegionFallbackLabel(region) {
 }
 
 function getMapSelectionId(position = flyer.position) {
+  if (isWorldPositionInHaven(position)) {
+    return "haven";
+  }
+
   const region = getChunkRegion(getChunkCoord(position.x), getChunkCoord(position.z));
   if (region === "city" || region === "cityConnector") {
     return "city";
@@ -1605,6 +1727,10 @@ function getMapSelectionId(position = flyer.position) {
 }
 
 function getMapTeleportState(mapId) {
+  if (mapId === "haven") {
+    return { ...havenSpawnState };
+  }
+
   if (mapId === "forest") {
     const axisChunks = -(neighborhoodChunkRadius + 4);
     const lateralChunks = 2;
@@ -1642,6 +1768,7 @@ function updateMapPicker() {
     neighborhood: "Neighborhood",
     forest: "Forest",
     city: "City",
+    haven: "Haven",
   };
   mapSelectLabelEl.textContent = labels[activeId] || "Neighborhood";
 
@@ -1649,6 +1776,7 @@ function updateMapPicker() {
     [mapNeighborhoodButton, "neighborhood"],
     [mapForestButton, "forest"],
     [mapCityButton, "city"],
+    [mapHavenButton, "haven"],
   ]) {
     button?.classList.toggle("is-active", id === activeId);
   }
@@ -1729,6 +1857,9 @@ function isPlayerInCave() {
 }
 
 function getPlayerEnvironmentRegion() {
+  if (isWorldPositionInHaven(flyer.position)) {
+    return "haven";
+  }
   return getChunkRegion(currentChunkX ?? 0, currentChunkZ ?? 0);
 }
 
@@ -1780,10 +1911,22 @@ function tryUseCavePortal(position) {
   return false;
 }
 
+function isWorldPositionInHaven(position) {
+  return (
+    position.x >= havenLayout.bounds.minX &&
+    position.x <= havenLayout.bounds.maxX &&
+    position.y >= havenLayout.bounds.minY &&
+    position.y <= havenLayout.bounds.maxY &&
+    position.z >= havenLayout.bounds.minZ &&
+    position.z <= havenLayout.bounds.maxZ
+  );
+}
+
 function updateAtmosphere(delta, elapsed) {
   const region = getPlayerEnvironmentRegion();
   const profile = atmosphereProfiles[region] || atmosphereProfiles.neighborhood;
-  const { nightBlend } = getDayNightPhase(elapsed);
+  const { nightBlend: cycleNightBlend } = getDayNightPhase(elapsed);
+  const nightBlend = region === "haven" ? 0 : cycleNightBlend;
   const daylightScale = THREE.MathUtils.lerp(1, 0.34, nightBlend);
   const blend = 1 - Math.exp(-3.2 * delta);
 
@@ -1804,6 +1947,9 @@ function updateAtmosphere(delta, elapsed) {
   fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, profile.fill * daylightScale + nightBlend * 0.06, blend);
   groundShadow.material.opacity = THREE.MathUtils.lerp(groundShadow.material.opacity, profile.shadow + nightBlend * 0.12, blend);
   updateNightMaterials(nightBlend);
+  if (dayNightState.skyGroup) {
+    dayNightState.skyGroup.visible = region !== "haven";
+  }
   updateDayNightSky(elapsed, nightBlend);
 
   for (const cloud of cloudActors) {
@@ -1828,7 +1974,7 @@ function updateBodyLight(delta) {
 function updateUiInteractivity() {
   const busy = Boolean(network.pendingAction);
   const hasPrivateCode = Boolean(network.joined && network.lobby?.code);
-  const mapButtons = [mapNeighborhoodButton, mapForestButton, mapCityButton];
+  const mapButtons = [mapNeighborhoodButton, mapForestButton, mapCityButton, mapHavenButton];
 
   menuShell.classList.toggle("is-busy", busy);
 
@@ -2852,6 +2998,17 @@ function addCollider(chunk, x, y, z, width, height, depth) {
   const box = new THREE.Box3(min, max);
   chunk.colliders.push(box);
   chunk.visibilityBlockers.push(box.clone());
+}
+
+function addHavenCollider(x, y, z, width, height, depth, includeVisibility = true) {
+  const min = new THREE.Vector3(x - width / 2, y, z - depth / 2);
+  const max = new THREE.Vector3(x + width / 2, y + height, z + depth / 2);
+  const box = new THREE.Box3(min, max);
+  havenState.colliders.push(box);
+  if (includeVisibility) {
+    havenState.visibilityBlockers.push(box.clone());
+  }
+  return box;
 }
 
 function addVisibilityBlocker(chunk, x, y, z, width, height, depth) {
@@ -5495,6 +5652,350 @@ function createSnailMonster() {
   };
 }
 
+function createSpecialHavenCloud() {
+  const group = new THREE.Group();
+  group.name = "HavenPortalCloud";
+  group.position.set(havenLayout.cloudPortal.x, havenLayout.cloudPortal.y, havenLayout.cloudPortal.z);
+  scene.add(group);
+
+  const rand = createRng(0xace5);
+  const puffs = [
+    [0, 0, 0, 13, 6.8, 10],
+    [-10, 0.7, 0, 8.2, 5.4, 7.4],
+    [10, 0.5, 1, 8.8, 5.8, 7.8],
+    [-3, 2.4, -6, 9.2, 6.2, 8],
+    [4, 2.2, 6, 10.2, 5.8, 7.2],
+    [0, -1.5, 4, 11, 4.2, 8],
+  ];
+  for (const [x, y, z, sx, sy, sz] of puffs) {
+    createScaledSphere(group, materials.havenCloudGlow, x, y, z, sx, sy, sz, { cast: false, receive: false });
+  }
+
+  for (let index = 0; index < 28; index += 1) {
+    const sparkle = createSphere(group, materials.havenCrystal, (rand() - 0.5) * 26, (rand() - 0.5) * 10, (rand() - 0.5) * 20, 0.16 + rand() * 0.14, {
+      cast: false,
+      receive: false,
+    });
+    havenState.sparkleClouds.push({ mesh: sparkle, phase: rand() * Math.PI * 2, baseY: sparkle.position.y });
+  }
+
+  const light = new THREE.PointLight(0xdbeaff, 1.8, 52, 1.8);
+  group.add(light);
+  havenState.portalCloud = { group, radius: havenLayout.cloudPortal.radius, destination: { ...havenSpawnState } };
+}
+
+function havenWorldX(x) {
+  return havenLayout.origin.x + x;
+}
+
+function havenWorldY(y) {
+  return havenLayout.origin.y + y;
+}
+
+function havenWorldZ(z) {
+  return havenLayout.origin.z + z;
+}
+
+function getParentWorldPoint(parent, x, y, z) {
+  parent.updateWorldMatrix(true, false);
+  return new THREE.Vector3(x, y, z).applyMatrix4(parent.matrixWorld);
+}
+
+function createHavenBox(parent, material, x, y, z, width, height, depth, options = {}) {
+  const mesh = createBox(parent, material, x, y, z, width, height, depth, options);
+  if (options.collider !== false) {
+    const world = getParentWorldPoint(parent, x, y - height / 2, z);
+    addHavenCollider(world.x, world.y, world.z, width, height, depth, options.visibility !== false);
+  }
+  return mesh;
+}
+
+function createHavenPatch(parent, material, x, z, width, depth, y = 0.02, colliderHeight = 0.5) {
+  const mesh = createPatch(parent, material, x, z, width, depth, y);
+  const world = getParentWorldPoint(parent, x, y - colliderHeight, z);
+  addHavenCollider(world.x, world.y, world.z, width, colliderHeight, depth, false);
+  return mesh;
+}
+
+function createHavenColumn(parent, x, z, height = 20, radius = 0.9) {
+  createCylinder(parent, materials.havenMarble, x, height / 2, z, radius, height, { cast: false });
+  createCylinder(parent, materials.havenGold, x, height + 0.25, z, radius * 1.22, 0.5, { cast: false });
+  createCylinder(parent, materials.havenGold, x, 0.25, z, radius * 1.2, 0.5, { cast: false });
+  const world = getParentWorldPoint(parent, x, 0, z);
+  addHavenCollider(world.x, world.y, world.z, radius * 2.1, height, radius * 2.1);
+}
+
+function createHavenStatue(parent, x, z, kind = "angel", scale = 1) {
+  const statue = new THREE.Group();
+  statue.position.set(x, 0.1, z);
+  parent.add(statue);
+  createBox(statue, materials.havenGold, 0, 0.25 * scale, 0, 1.5 * scale, 0.5 * scale, 1.5 * scale, { cast: false });
+  createBox(statue, materials.havenStatue, 0, 1.25 * scale, 0, 0.7 * scale, 1.8 * scale, 0.55 * scale, { cast: false });
+  createSphere(statue, materials.havenStatue, 0, 2.45 * scale, 0, 0.42 * scale, { cast: false });
+
+  if (kind === "angel") {
+    createBox(statue, materials.havenStatue, -0.7 * scale, 1.75 * scale, -0.12 * scale, 0.16 * scale, 1.3 * scale, 1.2 * scale, { rz: 0.42, cast: false });
+    createBox(statue, materials.havenStatue, 0.7 * scale, 1.75 * scale, -0.12 * scale, 0.16 * scale, 1.3 * scale, 1.2 * scale, { rz: -0.42, cast: false });
+  } else if (kind === "demon") {
+    createCone(statue, materials.havenDarkTrim, -0.22 * scale, 2.95 * scale, 0, 0.16 * scale, 0.52 * scale, 0.16 * scale, { cast: false });
+    createCone(statue, materials.havenDarkTrim, 0.22 * scale, 2.95 * scale, 0, 0.16 * scale, 0.52 * scale, 0.16 * scale, { cast: false });
+  } else if (kind === "dog") {
+    createBox(statue, materials.havenStatue, 0, 0.9 * scale, 0.38 * scale, 1.1 * scale, 0.62 * scale, 0.55 * scale, { cast: false });
+    createSphere(statue, materials.havenStatue, 0, 1.08 * scale, 0.9 * scale, 0.28 * scale, { cast: false });
+  }
+
+  const world = getParentWorldPoint(parent, x, 0, z);
+  addHavenCollider(world.x, world.y, world.z, 2.2 * scale, 3.2 * scale, 2.2 * scale);
+  return statue;
+}
+
+function createHavenChandelier(parent, x, y, z, radius = 4) {
+  const chandelier = new THREE.Group();
+  chandelier.position.set(x, y, z);
+  parent.add(chandelier);
+  createCylinder(chandelier, materials.havenGold, 0, 1.6, 0, 0.08, 3.2, { cast: false });
+  createCylinder(chandelier, materials.havenGold, 0, 0, 0, radius, 0.14, { cast: false });
+  for (let index = 0; index < 10; index += 1) {
+    const angle = (index / 10) * Math.PI * 2;
+    const px = Math.cos(angle) * radius;
+    const pz = Math.sin(angle) * radius;
+    const crystal = createCone(chandelier, materials.havenCrystal, px, -0.75 - (index % 3) * 0.28, pz, 0.35, 1.4, 0.35, { cast: false });
+    havenState.chandelierCrystals.push({ mesh: crystal, phase: index * 0.7 });
+    const glow = new THREE.PointLight(0xcff6ff, 0.55, 18, 1.8);
+    glow.position.set(px, -0.75, pz);
+    chandelier.add(glow);
+  }
+}
+
+function createCloudBallroom(parent) {
+  const room = new THREE.Group();
+  room.name = "CloudBallroom";
+  parent.add(room);
+  createHavenPatch(room, materials.havenMarble, 0, 0, 92, 74, 0.02);
+  createHavenBox(room, materials.havenCloud, 0, 22.5, 0, 96, 1.2, 78, { cast: false });
+  createHavenBox(room, materials.havenMarble, -46, 10, 0, 2.2, 20, 74, { cast: false });
+  createHavenBox(room, materials.havenMarble, 46, 10, 0, 2.2, 20, 74, { cast: false });
+  createHavenBox(room, materials.havenMarble, 0, 10, -37, 92, 20, 2.2, { cast: false });
+  createHavenBox(room, materials.havenMarble, -25, 10, 37, 34, 20, 2.2, { cast: false });
+  createHavenBox(room, materials.havenMarble, 25, 10, 37, 34, 20, 2.2, { cast: false });
+  createHavenBox(room, materials.havenGold, 0, 17, 37.3, 15, 2.2, 1.4, { cast: false });
+
+  for (const side of [-1, 1]) {
+    for (let index = 0; index < 5; index += 1) {
+      const z = -26 + index * 13;
+      createHavenBox(room, materials.havenCrystal, side * 46.2, 10, z, 0.35, 10.5, 5.4, { collider: false, cast: false });
+      createHavenBox(room, materials.havenGold, side * 45.6, 10, z, 0.35, 12, 0.22, { collider: false, cast: false });
+    }
+  }
+
+  for (let index = 0; index < 6; index += 1) {
+    createHavenColumn(room, -34 + index * 13.6, -28, 20, 0.8);
+    createHavenColumn(room, -34 + index * 13.6, 26, 20, 0.8);
+  }
+
+  createHavenChandelier(room, -20, 19, -8, 3.6);
+  createHavenChandelier(room, 20, 19, -8, 3.6);
+  createHavenChandelier(room, 0, 20, 16, 4.2);
+  createHavenBox(room, materials.havenGold, 0, 2.2, -31.5, 12, 1.8, 5.5, { cast: false });
+  createHavenBox(room, materials.havenDarkTrim, 0, 4.2, -33.2, 8.5, 3.8, 1.3, { cast: false });
+  createHavenBox(room, materials.havenCrystal, 0, 7.2, -34.2, 6.2, 1.6, 0.3, { collider: false, cast: false });
+
+  ["angel", "dog", "demon", "person", "angel", "dog"].forEach((kind, index) => {
+    const side = index % 2 === 0 ? -1 : 1;
+    createHavenStatue(room, side * 37, -20 + Math.floor(index / 2) * 18, kind, 1.18);
+  });
+
+  createHavenBox(room, materials.havenGold, -4, 4.2, 39, 6, 8, 0.8, { cast: false });
+  createHavenBox(room, materials.havenGold, 4, 4.2, 39, 6, 8, 0.8, { cast: false });
+}
+
+function createHavenGate(parent, x, z, rotationY = 0) {
+  const gate = new THREE.Group();
+  gate.position.set(x, 0, z);
+  gate.rotation.y = rotationY;
+  parent.add(gate);
+  createBox(gate, materials.havenGold, -3.2, 4, 0, 0.6, 8, 0.6, { cast: false });
+  createBox(gate, materials.havenGold, 3.2, 4, 0, 0.6, 8, 0.6, { cast: false });
+  createBox(gate, materials.havenGold, 0, 8.2, 0, 7.2, 0.7, 0.7, { cast: false });
+  createBox(gate, materials.havenSymbol, 0, 6.2, -0.08, 2.4, 2.4, 0.2, { cast: false, receive: false });
+}
+
+function createHavenPedestal(parent, x, z, artifactMaterial = materials.havenCrystal) {
+  createHavenBox(parent, materials.havenMarble, x, 0.55, z, 2.1, 1.1, 2.1, { cast: false });
+  createHavenBox(parent, materials.havenGold, x, 1.25, z, 1.4, 0.28, 1.4, { cast: false });
+  createCone(parent, artifactMaterial, x, 2.35, z, 0.7, 1.8, 0.7, { round: true, cast: false, receive: false });
+}
+
+function createCloudFountain(parent, x, z) {
+  createCylinder(parent, materials.havenGold, x, 0.36, z, 2.8, 0.72, { cast: false });
+  createCylinder(parent, materials.havenMarble, x, 0.82, z, 2.15, 0.42, { cast: false });
+  createScaledSphere(parent, materials.havenCloudGlow, x, 1.65, z, 1.6, 0.55, 1.6, { cast: false, receive: false });
+  createCylinder(parent, materials.water, x, 2.35, z, 0.25, 2.2, { cast: false, receive: false });
+}
+
+function createHavenMaze(parent) {
+  const maze = new THREE.Group();
+  maze.name = "HavenHedgeMaze";
+  maze.position.set(0, 0, 118);
+  parent.add(maze);
+  const rand = createRng(0x8172a);
+  const cell = 12;
+  const cols = 13;
+  const rows = 13;
+  const width = cols * cell;
+  const depth = rows * cell;
+  const halfW = width * 0.5;
+  const halfD = depth * 0.5;
+  createHavenPatch(maze, materials.havenGrass, 0, 0, width + 24, depth + 24, 0.03);
+  createHavenBox(maze, materials.havenCloudGlow, 0, 16, 0, width + 34, 1.4, depth + 34, { cast: false, receive: false });
+
+  const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+  const verticalWalls = Array.from({ length: rows }, () => Array(cols + 1).fill(true));
+  const horizontalWalls = Array.from({ length: rows + 1 }, () => Array(cols).fill(true));
+  const stack = [[Math.floor(cols / 2), 0]];
+  visited[0][Math.floor(cols / 2)] = true;
+  while (stack.length > 0) {
+    const [cx, cy] = stack[stack.length - 1];
+    const neighbors = [];
+    for (const [dx, dy, wall] of [[1, 0, "right"], [-1, 0, "left"], [0, 1, "down"], [0, -1, "up"]]) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && !visited[ny][nx]) {
+        neighbors.push([nx, ny, wall]);
+      }
+    }
+    if (neighbors.length === 0) {
+      stack.pop();
+      continue;
+    }
+    const [nx, ny, wall] = pick(rand, neighbors);
+    if (wall === "right") verticalWalls[cy][cx + 1] = false;
+    if (wall === "left") verticalWalls[cy][cx] = false;
+    if (wall === "down") horizontalWalls[cy + 1][cx] = false;
+    if (wall === "up") horizontalWalls[cy][cx] = false;
+    visited[ny][nx] = true;
+    stack.push([nx, ny]);
+  }
+  for (let index = 0; index < 24; index += 1) {
+    const x = 1 + Math.floor(rand() * (cols - 2));
+    const y = 1 + Math.floor(rand() * (rows - 2));
+    if (rand() > 0.5) verticalWalls[y][x] = false;
+    else horizontalWalls[y][x] = false;
+  }
+  horizontalWalls[0][Math.floor(cols / 2)] = false;
+  horizontalWalls[rows][Math.floor(cols / 2)] = false;
+  verticalWalls[Math.floor(rows / 2)][0] = false;
+  verticalWalls[Math.floor(rows / 2)][cols] = false;
+  horizontalWalls[Math.floor(rows * 0.7)][cols - 3] = false;
+
+  const wallHeight = 8.8;
+  const wallThick = 1.3;
+  for (let y = 0; y <= rows; y += 1) {
+    for (let x = 0; x < cols; x += 1) {
+      if (horizontalWalls[y][x]) {
+        createHavenBox(maze, materials.havenHedge, -halfW + x * cell + cell * 0.5, wallHeight * 0.5, -halfD + y * cell, cell + wallThick, wallHeight, wallThick, { cast: false });
+      }
+    }
+  }
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x <= cols; x += 1) {
+      if (verticalWalls[y][x]) {
+        createHavenBox(maze, materials.havenHedge, -halfW + x * cell, wallHeight * 0.5, -halfD + y * cell + cell * 0.5, wallThick, wallHeight, cell + wallThick, { cast: false });
+      }
+    }
+  }
+
+  createHavenGate(maze, 0, -halfD - 7, 0);
+  createHavenGate(maze, 0, halfD + 7, Math.PI);
+  createHavenGate(maze, -halfW - 7, 0, Math.PI / 2);
+  createHavenGate(maze, halfW + 7, 0, -Math.PI / 2);
+  createHavenGate(maze, halfW - cell * 2.5, halfD + 7, Math.PI);
+
+  for (let index = 0; index < 12; index += 1) {
+    const x = -halfW + (1 + Math.floor(rand() * (cols - 2))) * cell + cell * 0.5;
+    const z = -halfD + (1 + Math.floor(rand() * (rows - 2))) * cell + cell * 0.5;
+    if (index % 4 === 0) createCloudFountain(maze, x, z);
+    else if (index % 3 === 0) createHavenStatue(maze, x, z, pick(rand, ["angel", "dog", "demon", "person"]), 0.78);
+    else createHavenPedestal(maze, x, z, index % 2 === 0 ? materials.havenCrystal : materials.havenSymbol);
+  }
+  for (let index = 0; index < 26; index += 1) {
+    createSphere(maze, materials.flower, -halfW + rand() * width, 1.2 + rand() * 2.4, -halfD + rand() * depth, 0.18 + rand() * 0.16, { cast: false, receive: false });
+  }
+}
+
+function createHavenTower(parent) {
+  const tower = new THREE.Group();
+  tower.name = "HavenObservatoryTower";
+  tower.position.set(0, 0, 118);
+  parent.add(tower);
+  createCylinder(tower, materials.havenMarble, 0, 25, 0, 7.2, 50, { cast: false });
+  let world = getParentWorldPoint(tower, 0, 0, 0);
+  addHavenCollider(world.x, world.y, world.z, 14.4, 50, 14.4);
+  createCylinder(tower, materials.havenGold, 0, 50.8, 0, 8.8, 1.4, { cast: false });
+  createCylinder(tower, materials.havenCloud, 0, 56, 0, 15, 1.2, { cast: false });
+  world = getParentWorldPoint(tower, 0, 55.4, 0);
+  addHavenCollider(world.x, world.y, world.z, 30, 1.2, 30);
+  for (let index = 0; index < 18; index += 1) {
+    const angle = (index / 18) * Math.PI * 2;
+    createBox(tower, materials.havenGold, Math.cos(angle) * 8.6, 57.1, Math.sin(angle) * 8.6, 0.45, 2.8, 0.45, { ry: angle, cast: false });
+  }
+  for (let step = 0; step < 30; step += 1) {
+    const angle = step * 0.48;
+    createBox(tower, materials.havenGold, Math.cos(angle) * 9.6, 1.5 + step * 1.72, Math.sin(angle) * 9.6, 4.2, 0.32, 2.1, { ry: -angle, cast: false });
+  }
+  const telescope = new THREE.Group();
+  telescope.position.set(0, 59, 0);
+  telescope.rotation.y = -0.55;
+  tower.add(telescope);
+  createCylinder(telescope, materials.havenDarkTrim, 0, 1.2, 0, 1.3, 8.8, { rx: Math.PI / 2, cast: false });
+  createCylinder(telescope, materials.havenGold, 0, 1.2, -4.8, 1.8, 0.8, { rx: Math.PI / 2, cast: false });
+  createCylinder(telescope, materials.havenCrystal, 0, 1.2, -5.35, 1.55, 0.24, { rx: Math.PI / 2, cast: false, receive: false });
+  createBox(telescope, materials.havenGold, 0, -0.35, 0, 0.6, 3.1, 0.6, { cast: false });
+}
+
+function initializeHavenSystem() {
+  if (havenState.initialized) return;
+  havenState.initialized = true;
+  createSpecialHavenCloud();
+  const group = new THREE.Group();
+  group.name = "FlysWorldHaven";
+  group.position.set(havenLayout.origin.x, havenLayout.origin.y, havenLayout.origin.z);
+  scene.add(group);
+  havenState.group = group;
+  createCloudBallroom(group);
+  createHavenMaze(group);
+  createHavenTower(group);
+  const ambient = new THREE.PointLight(0xfff2c8, 1.4, 120, 1.6);
+  ambient.position.set(0, 28, 50);
+  group.add(ambient);
+  const mazeGlow = new THREE.PointLight(0xb9d7ff, 1.2, 220, 1.9);
+  mazeGlow.position.set(0, 35, 118);
+  group.add(mazeGlow);
+}
+
+function updateHavenSystem(delta, elapsed) {
+  havenState.portalCooldown = Math.max(0, havenState.portalCooldown - delta);
+  if (havenState.portalCloud) {
+    const cloud = havenState.portalCloud;
+    cloud.group.rotation.y += delta * 0.04;
+    for (const sparkle of havenState.sparkleClouds) {
+      sparkle.mesh.position.y = sparkle.baseY + Math.sin(elapsed * 2.2 + sparkle.phase) * 0.55;
+      sparkle.mesh.rotation.y += delta * 0.8;
+    }
+    const distance = flyer.position.distanceTo(cloud.group.position);
+    if (network.joined && havenState.portalCooldown <= 0 && !isWorldPositionInHaven(flyer.position) && distance < cloud.radius) {
+      havenState.portalCooldown = 2.4;
+      applyLocalSpawnState(cloud.destination);
+      velocity.set(0, 0, 0);
+      syncSessionNow(false);
+    }
+  }
+  for (const crystal of havenState.chandelierCrystals) {
+    crystal.mesh.rotation.y += delta * 0.8;
+    crystal.mesh.position.y += Math.sin(elapsed * 1.7 + crystal.phase) * 0.002;
+  }
+}
+
 function createBird(chunk, rand) {
   const root = new THREE.Group();
   const rig = new THREE.Group();
@@ -6763,6 +7264,12 @@ function trimChunkBuildQueue(neededKeys, centerX = currentChunkX, centerZ = curr
 }
 
 function refreshWorldStats(centerX = currentChunkX, centerZ = currentChunkZ) {
+  if (isWorldPositionInHaven(flyer.position)) {
+    lastKnownDistrict = "Haven";
+    activeLifeCount = [...chunks.values()].reduce((sum, chunk) => sum + chunk.actors.length, 0);
+    return;
+  }
+
   const currentChunk = chunks.get(`${centerX},${centerZ}`);
   if (currentChunk) {
     lastKnownDistrict = currentChunk.type;
@@ -6915,6 +7422,10 @@ function resolveCollisions(position) {
     }
   }
 
+  if (isWorldPositionInHaven(position) || isWorldPositionInHaven(flyer.position)) {
+    collided = resolveCollisionBoxes(position, havenState.colliders) || collided;
+  }
+
   return collided;
 }
 
@@ -6988,12 +7499,15 @@ function updateFlight(delta, elapsed) {
   velocity.clampLength(0, maxSpeed);
 
   nextPosition.copy(flyer.position).addScaledVector(velocity, delta);
-  nextPosition.y = THREE.MathUtils.clamp(nextPosition.y, 1.2, 48);
+  const inHavenSpace = isWorldPositionInHaven(flyer.position) || isWorldPositionInHaven(nextPosition);
+  const minY = inHavenSpace ? havenLayout.bounds.minY : 1.2;
+  const maxY = inHavenSpace ? havenLayout.bounds.maxY : 48;
+  nextPosition.y = THREE.MathUtils.clamp(nextPosition.y, minY, maxY);
 
   const collided = resolveCollisions(nextPosition);
 
-  if (nextPosition.y <= 1.21) {
-    nextPosition.y = 1.2;
+  if (nextPosition.y <= minY + 0.01) {
+    nextPosition.y = minY;
     velocity.y = Math.max(velocity.y, 0);
   }
 
@@ -7031,6 +7545,7 @@ function updateActors(delta, elapsed) {
     }
   }
 
+  updateHavenSystem(delta, elapsed);
   updateForestMonster(delta, elapsed);
 }
 
@@ -7403,6 +7918,9 @@ mapForestButton.addEventListener("click", () => {
 mapCityButton.addEventListener("click", () => {
   teleportToMap("city");
 });
+mapHavenButton.addEventListener("click", () => {
+  teleportToMap("haven");
+});
 
 renderer.domElement.addEventListener("click", () => {
   getForestAudioContext();
@@ -7511,6 +8029,7 @@ for (let index = 0; index < 12; index += 1) {
 }
 
 initializeDayNightSky();
+initializeHavenSystem();
 setVisibilityMode("public");
 showMenu("home");
 renderPlayerColorPicker();
