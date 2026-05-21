@@ -1,3 +1,5 @@
+import { createDefaultWorldGeometries } from "./world-builders.js";
+
 export const MAP_IDS = Object.freeze({
   neighborhood: "neighborhood",
   forest: "forest",
@@ -251,6 +253,7 @@ export function createSharedWorldRuntime(THREE, scene) {
   const root = new THREE.Group();
   root.name = "FlysWorldSharedWorldRoot";
   scene.add(root);
+  const geometries = createDefaultWorldGeometries(THREE);
 
   const profile = ATMOSPHERE_PROFILES.neighborhood;
   scene.background = new THREE.Color(profile.background);
@@ -258,6 +261,7 @@ export function createSharedWorldRuntime(THREE, scene) {
 
   return {
     root,
+    geometries,
     maps: FLYS_WORLD_MAPS,
     constants: WORLD_CONSTANTS,
     getChunkRegion,
