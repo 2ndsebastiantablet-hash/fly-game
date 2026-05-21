@@ -15,6 +15,7 @@
 html,
 body {
   margin: 0;
+  overflow: hidden;
   min-height: 100%;
   font-family: "Trebuchet MS", Verdana, sans-serif;
   background:
@@ -44,6 +45,8 @@ body::before {
 }
 
 .vr-card {
+  position: relative;
+  z-index: 1;
   width: min(34rem, 100%);
   padding: 2rem;
   border: 3px solid var(--panel-border);
@@ -91,6 +94,38 @@ button,
   cursor: pointer;
 }
 
+.vr-field {
+  display: block;
+  margin: 1rem auto 0;
+  max-width: 22rem;
+  text-align: left;
+}
+
+.vr-field span {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--gold);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vr-field input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.8rem;
+  background: rgba(6, 9, 20, 0.62);
+  color: var(--cloud);
+  font: inherit;
+}
+
+.vr-field input:focus {
+  border-color: var(--gold);
+  outline: none;
+}
+
 button:hover,
 .vr-link:hover {
   filter: brightness(1.08);
@@ -105,4 +140,15 @@ button:hover,
 .vr-link {
   background: rgba(255, 255, 255, 0.14);
   color: var(--cloud);
+}
+
+.vr-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.is-vr-preview .vr-card {
+  transform: translateY(16vh) scale(0.86);
+  opacity: 0.24;
 }
