@@ -641,6 +641,8 @@ export function createVrNeighborhoodWorld(THREE, parent, options = {}) {
   return {
     root,
     mapName: "Neighborhood",
+    spawn: { x: 0, y: 3.8, z: 0, yaw: 0, pitch: -0.1, roll: 0 },
+    bounds: { minX: -170, maxX: 155, minY: 0.7, maxY: 95, minZ: -190, maxZ: 115 },
     chunks,
     get objectCount() {
       return objectCount;
@@ -652,6 +654,9 @@ export function createVrNeighborhoodWorld(THREE, parent, options = {}) {
       for (const actor of actors) {
         actor.update(delta, time);
       }
+    },
+    dispose() {
+      parent.remove(root);
     },
   };
 }
