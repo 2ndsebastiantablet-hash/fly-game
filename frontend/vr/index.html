@@ -14,11 +14,20 @@
         <p class="vr-copy">
           This is the safe Phase 1 VR route. The regular PC game stays on the main page, and this page is only a start screen for future WebXR work.
         </p>
-        <button id="vr-start-button" type="button">Check VR Support</button>
+        <label class="vr-field">
+          <span>Fly Name</span>
+          <input id="vr-name-input" maxlength="20" placeholder="VR Fly" type="text">
+        </label>
+        <label class="vr-field">
+          <span>Private Code</span>
+          <input id="vr-code-input" maxlength="12" placeholder="Optional code" type="text">
+        </label>
+        <button id="vr-enter-button" type="button">Enter VR</button>
         <p id="vr-status" class="vr-status" role="status">Preparing VR start screen...</p>
         <a class="vr-link" href="/">Back to PC Game</a>
       </section>
     </main>
-    <script src="/vr/vr.js" defer></script>
+    <script src="/config.js"></script>
+    <script type="module" src="/vr/vr.js"></script>
   </body>
 </html>
