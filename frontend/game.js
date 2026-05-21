@@ -1,4 +1,12 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
+import {
+  createBoxMesh,
+  createConeMesh,
+  createCylinderMesh,
+  createGroundHolePatchMesh,
+  createPatchMesh,
+  createRingPatchMesh,
+} from "./shared/world-builders.js";
 
 const app = document.querySelector("#app");
 const menuOverlay = document.querySelector("#menu-overlay");
@@ -304,6 +312,21 @@ function paintGlassGrid(baseColor, frameColor = 0x1d2e42) {
   };
 }
 
+function paintPlainGlass(baseColor, frameColor = 0x1d2e42, shineColor = shadeHex(baseColor, 0.22)) {
+  return (context, size) => {
+    context.fillStyle = cssHex(frameColor);
+    context.fillRect(0, 0, size, size);
+    context.fillStyle = cssHex(baseColor);
+    context.fillRect(5, 5, size - 10, size - 10);
+    context.fillStyle = cssHex(shadeHex(baseColor, -0.18));
+    context.fillRect(5, size - 8, size - 10, 3);
+    context.fillRect(size - 8, 5, 3, size - 10);
+    context.fillStyle = cssHex(shineColor);
+    context.fillRect(9, 9, Math.max(8, size * 0.34), 4);
+    context.fillRect(9, 16, Math.max(5, size * 0.2), 2);
+  };
+}
+
 function paintMetalPanels(baseColor, accentColor = 0xe1b64b) {
   return (context, size) => {
     context.fillStyle = cssHex(baseColor);
@@ -561,14 +584,15 @@ function paintCelestialDisc(baseColor, ringColor, glowColor) {
     context.clearRect(0, 0, size, size);
     const center = size * 0.5;
     const radius = size * 0.38;
-    const gradient = context.createRadialGradient(center, center, radius * 0.2, center, center, radius * 1.24);
+    const gradient = context.createRadialGradient(center, center, radius * 0.1, center, center, radius * 1.12);
     gradient.addColorStop(0, cssHex(glowColor));
-    gradient.addColorStop(0.55, cssHex(baseColor));
-    gradient.addColorStop(0.78, cssHex(baseColor));
+    gradient.addColorStop(0.42, cssHex(baseColor));
+    gradient.addColorStop(0.72, cssHex(baseColor));
+    gradient.addColorStop(0.88, cssHex(shadeHex(baseColor, -0.1)));
     gradient.addColorStop(1, "rgba(255,255,255,0)");
     context.fillStyle = gradient;
     context.beginPath();
-    context.arc(center, center, radius * 1.24, 0, Math.PI * 2);
+    context.arc(center, center, radius * 1.12, 0, Math.PI * 2);
     context.fill();
 
     context.strokeStyle = cssHex(ringColor);
@@ -585,6 +609,12 @@ function paintCelestialDisc(baseColor, ringColor, glowColor) {
       );
       context.stroke();
     }
+    context.strokeStyle = cssHex(shadeHex(ringColor, -0.18));
+    context.globalAlpha = 0.38;
+    context.lineWidth = 3;
+    context.beginPath();
+    context.arc(center, center, radius * 0.78, 0, Math.PI * 2);
+    context.stroke();
     context.globalAlpha = 1;
   };
 }
@@ -734,13 +764,13 @@ const cityAccentMaterials = [
 ];
 
 const cityGlassMaterials = [
-  createRetroMaterial(0xaed6ff, paintGlassGrid(0xaed6ff), { size: 64, emissive: 0x295680, emissiveIntensity: 0.22, roughness: 0.2 }),
-  createRetroMaterial(0x9dc3ee, paintGlassGrid(0x9dc3ee, 0x1e354d), { size: 64, emissive: 0x1e415e, emissiveIntensity: 0.2, roughness: 0.22 }),
-  createRetroMaterial(0xc8def6, paintGlassGrid(0xc8def6, 0x31415a), { size: 64, emissive: 0x35526c, emissiveIntensity: 0.18, roughness: 0.2 }),
+  createRetroMaterial(0xaed6ff, paintPlainGlass(0xaed6ff), { size: 64, emissive: 0x295680, emissiveIntensity: 0.22, roughness: 0.2 }),
+  createRetroMaterial(0x9dc3ee, paintPlainGlass(0x9dc3ee, 0x1e354d), { size: 64, emissive: 0x1e415e, emissiveIntensity: 0.2, roughness: 0.22 }),
+  createRetroMaterial(0xc8def6, paintPlainGlass(0xc8def6, 0x31415a), { size: 64, emissive: 0x35526c, emissiveIntensity: 0.18, roughness: 0.2 }),
 ];
 
-materials.window = createRetroMaterial(0x9ac4ff, paintGlassGrid(0x9ac4ff), { size: 64, emissive: 0x365272, emissiveIntensity: 0.24, roughness: 0.22 });
-materials.carGlass = createRetroMaterial(0xaed4ff, paintGlassGrid(0xaed4ff, 0x26384c), { size: 64, emissive: 0x24384e, emissiveIntensity: 0.18, roughness: 0.24, transparent: true, opacity: 0.7 });
+materials.window = createRetroMaterial(0x9ac4ff, paintPlainGlass(0x9ac4ff), { size: 64, emissive: 0x365272, emissiveIntensity: 0.24, roughness: 0.22 });
+materials.carGlass = createRetroMaterial(0xaed4ff, paintPlainGlass(0xaed4ff, 0x26384c), { size: 64, emissive: 0x24384e, emissiveIntensity: 0.18, roughness: 0.24, transparent: true, opacity: 0.7 });
 materials.door = createRetroMaterial(0x694833, paintMetalPanels(0x694833, 0xd9b38d), { size: 64, roughness: 0.96 });
 materials.trim = createRetroMaterial(0xf2eee7, paintMetalPanels(0xf2eee7, 0x4c5361), { size: 64, roughness: 0.88 });
 materials.fence = createRetroMaterial(0xe8e0d6, paintSiding(0xe8e0d6, 0xa49b91), { size: 64 });
@@ -1250,11 +1280,11 @@ function createCelestialSprite(texture, size, opacity = 1) {
     transparent: true,
     opacity,
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,
   });
   const sprite = new THREE.Sprite(material);
   sprite.scale.set(size, size, 1);
-  sprite.renderOrder = 10;
+  sprite.renderOrder = 0;
   return sprite;
 }
 
@@ -1293,8 +1323,8 @@ function initializeDayNightSky() {
   stars.frustumCulled = false;
   skyGroup.add(stars);
 
-  const sunTexture = createAlphaPixelCanvasTexture(128, paintCelestialDisc(0xffd86a, 0xf3a538, 0xfff0a8));
-  const moonTexture = createAlphaPixelCanvasTexture(128, paintCelestialDisc(0xeaf0ff, 0xa8b5d7, 0xffffff));
+  const sunTexture = createAlphaPixelCanvasTexture(128, paintCelestialDisc(0xffcf24, 0xff8a00, 0xffffb0));
+  const moonTexture = createAlphaPixelCanvasTexture(128, paintCelestialDisc(0xf8fbff, 0xb9c4d8, 0xffffff));
   const sunSprite = createCelestialSprite(sunTexture, 145, 1);
   const moonSprite = createCelestialSprite(moonTexture, 170, 0);
   skyGroup.add(sunSprite);
@@ -2870,14 +2900,7 @@ async function leaveCurrentLobby() {
 }
 
 function createBox(parent, material, x, y, z, width, height, depth, options = {}) {
-  const mesh = new THREE.Mesh(geometries.box, material);
-  mesh.position.set(x, y, z);
-  mesh.scale.set(width, height, depth);
-  mesh.rotation.set(options.rx || 0, options.ry || 0, options.rz || 0);
-  mesh.castShadow = options.cast !== false;
-  mesh.receiveShadow = options.receive !== false;
-  parent.add(mesh);
-  return mesh;
+  return createBoxMesh(THREE, geometries, parent, material, x, y, z, width, height, depth, options);
 }
 
 function createRetroBox(parent, materialsByFace, x, y, z, width, height, depth, options = {}) {
@@ -2934,71 +2957,23 @@ function createScaledSphere(parent, material, x, y, z, scaleX, scaleY, scaleZ, o
 }
 
 function createCylinder(parent, material, x, y, z, radius, height, options = {}) {
-  const mesh = new THREE.Mesh(geometries.cylinder, material);
-  mesh.position.set(x, y, z);
-  mesh.scale.set(radius * 2, height, radius * 2);
-  mesh.rotation.set(options.rx || 0, options.ry || 0, options.rz || 0);
-  mesh.castShadow = options.cast !== false;
-  mesh.receiveShadow = options.receive !== false;
-  parent.add(mesh);
-  return mesh;
+  return createCylinderMesh(THREE, geometries, parent, material, x, y, z, radius, height, options);
 }
 
 function createCone(parent, material, x, y, z, width, height, depth, options = {}) {
-  const geometry = options.round ? geometries.coneRound : geometries.coneSquare;
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(x, y, z);
-  mesh.scale.set(width, height, depth);
-  mesh.rotation.set(options.rx || 0, options.ry || 0, options.rz || 0);
-  mesh.castShadow = options.cast !== false;
-  mesh.receiveShadow = options.receive !== false;
-  parent.add(mesh);
-  return mesh;
+  return createConeMesh(THREE, geometries, parent, material, x, y, z, width, height, depth, options);
 }
 
 function createPatch(parent, material, x, z, width, depth, y = 0.02) {
-  const mesh = new THREE.Mesh(geometries.plane, material);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(x, y, z);
-  mesh.scale.set(width, depth, 1);
-  mesh.castShadow = false;
-  mesh.receiveShadow = true;
-  parent.add(mesh);
-  return mesh;
+  return createPatchMesh(THREE, geometries, parent, material, x, z, width, depth, y);
 }
 
 function createRingPatch(parent, material, x, z, innerRadius, outerRadius, y = 0.02, segments = 40) {
-  const mesh = new THREE.Mesh(
-    new THREE.RingGeometry(innerRadius, outerRadius, segments),
-    material
-  );
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(x, y, z);
-  mesh.castShadow = false;
-  mesh.receiveShadow = true;
-  parent.add(mesh);
-  return mesh;
+  return createRingPatchMesh(THREE, parent, material, x, z, innerRadius, outerRadius, y, segments);
 }
 
 function createGroundHolePatch(parent, material, x, z, width, depth, holeX, holeZ, holeRadius) {
-  const shape = new THREE.Shape();
-  shape.moveTo(-width * 0.5, -depth * 0.5);
-  shape.lineTo(width * 0.5, -depth * 0.5);
-  shape.lineTo(width * 0.5, depth * 0.5);
-  shape.lineTo(-width * 0.5, depth * 0.5);
-  shape.lineTo(-width * 0.5, -depth * 0.5);
-
-  const hole = new THREE.Path();
-  hole.absellipse(holeX, holeZ, holeRadius, holeRadius, 0, Math.PI * 2, true, 0);
-  shape.holes.push(hole);
-
-  const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 48), material);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(x, 0, z);
-  mesh.castShadow = false;
-  mesh.receiveShadow = true;
-  parent.add(mesh);
-  return mesh;
+  return createGroundHolePatchMesh(THREE, parent, material, x, z, width, depth, holeX, holeZ, holeRadius);
 }
 
 function addCollider(chunk, x, y, z, width, height, depth) {
