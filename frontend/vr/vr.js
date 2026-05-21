@@ -1,5 +1,8 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
-import { createSharedWorldRuntime, getMapTeleportState } from "../shared/world.js";
+import { createSharedWorldRuntime, getMapTeleportState, MAP_IDS } from "../shared/world.js";
+import { createVrCityWorld } from "../shared/vr-city-world.js";
+import { createVrForestWorld } from "../shared/vr-forest-world.js";
+import { createVrHavenWorld } from "../shared/vr-haven-world.js";
 import { createVrNeighborhoodWorld } from "../shared/vr-neighborhood-world.js";
 
 const statusEl = document.querySelector("#vr-status");
@@ -28,6 +31,7 @@ const state = {
   worldRoot: null,
   sharedWorld: null,
   renderedWorld: null,
+  currentMapId: MAP_IDS.neighborhood,
   debugGroup: null,
   debugCanvas: null,
   debugContext: null,
@@ -44,6 +48,18 @@ const state = {
   lastSnapTurnAt: 0,
   status: "VR menu ready. Use either trigger to select.",
 };
+
+const vrMapBuilders = {
+  [MAP_IDS.neighborhood]: createVrNeighborhoodWorld,
+  [MAP_IDS.forest]: createVrForestWorld,
+  [MAP_IDS.city]: createVrCityWorld,
+  [MAP_IDS.haven]: createVrHavenWorld,
+};
+
+function getInitialVrMapId() {
+  const map = new URLSearchParams(window.location.search).get("map")?.toLowerCase();
+  return vrMapBuilders[map] ? map : MAP_IDS.neighborhood;
+}
 
 function setStatus(message, isError = false) {
   state.status = message;
@@ -330,6 +346,45 @@ function updateVrDebugPanel(time = 0, force = false) {
   state.debugTexture.needsUpdate = true;
 }
 
+function loadVrWorldMap(mapId = MAP_IDS.neighborhood, movePlayerToSpawn = false) {
+  const nextMapId = vrMapBuilders[mapId] ? mapId : MAP_IDS.neighborhood;
+  if (state.renderedWorld?.dispose) {
+    state.renderedWorld.dispose();
+  } else if (state.renderedWorld?.root) {
+    state.worldRoot.remove(state.renderedWorld.root);
+  }
+
+  const buildWorld = vrMapBuilders[nextMapId];
+  state.currentMapId = nextMapId;
+  state.renderedWorld = buildWorld(THREE, state.worldRoot, {
+    geometries: state.sharedWorld.geometries,
+    radius: nextMapId === MAP_IDS.neighborhood ? 2 : 1,
+  });
+
+  if (movePlayerToSpawn && state.playerRig) {
+    const spawn = state.renderedWorld.spawn || getMapTeleportState(nextMapId);
+    state.playerRig.position.set(spawn.x, spawn.y, spawn.z);
+    state.yaw = spawn.yaw || 0;
+    state.playerRig.rotation.y = state.yaw;
+  }
+
+  updateVrDebugPanel(performance.now(), true);
+  return state.renderedWorld;
+}
+
+function clampVrPlayerPosition() {
+  const bounds = state.renderedWorld?.bounds;
+  if (!bounds) {
+    state.playerRig.position.y = THREE.MathUtils.clamp(state.playerRig.position.y, 0.7, 95);
+    state.playerRig.position.x = THREE.MathUtils.clamp(state.playerRig.position.x, -170, 155);
+    state.playerRig.position.z = THREE.MathUtils.clamp(state.playerRig.position.z, -190, 115);
+    return;
+  }
+  state.playerRig.position.x = THREE.MathUtils.clamp(state.playerRig.position.x, bounds.minX, bounds.maxX);
+  state.playerRig.position.y = THREE.MathUtils.clamp(state.playerRig.position.y, bounds.minY, bounds.maxY);
+  state.playerRig.position.z = THREE.MathUtils.clamp(state.playerRig.position.z, bounds.minZ, bounds.maxZ);
+}
+
 function updateRayPointers() {
   if (state.joined) {
     state.selectedButton = null;
@@ -441,11 +496,11 @@ function startVrFlight(snapshot) {
     state.flyBody = createFirstPersonFly();
     state.camera.add(state.flyBody);
   }
-  const sharedSpawn = getMapTeleportState("neighborhood");
+  const sharedSpawn = state.renderedWorld?.spawn || getMapTeleportState(state.currentMapId);
   state.playerRig.position.set(
-    Number(snapshot.player?.state?.x) || sharedSpawn.x,
-    Number(snapshot.player?.state?.y) || sharedSpawn.y,
-    Number(snapshot.player?.state?.z) || sharedSpawn.z
+    state.currentMapId === MAP_IDS.neighborhood ? (Number(snapshot.player?.state?.x) || sharedSpawn.x) : sharedSpawn.x,
+    state.currentMapId === MAP_IDS.neighborhood ? (Number(snapshot.player?.state?.y) || sharedSpawn.y) : sharedSpawn.y,
+    state.currentMapId === MAP_IDS.neighborhood ? (Number(snapshot.player?.state?.z) || sharedSpawn.z) : sharedSpawn.z
   );
   updateVrDebugPanel(performance.now(), true);
   setStatus(`Joined ${snapshot.lobby?.name || "server"}. VR flying controls active.`);
@@ -598,9 +653,7 @@ function updateVrMovement(delta, time) {
     movement.normalize();
   }
   state.playerRig.position.addScaledVector(movement, speed * delta);
-  state.playerRig.position.y = THREE.MathUtils.clamp(state.playerRig.position.y, 0.7, 95);
-  state.playerRig.position.x = THREE.MathUtils.clamp(state.playerRig.position.x, -170, 155);
-  state.playerRig.position.z = THREE.MathUtils.clamp(state.playerRig.position.z, -190, 115);
+  clampVrPlayerPosition();
   updateFlyBody(time);
 }
 
@@ -638,13 +691,7 @@ function createPreviewScene() {
   state.sharedWorld = createSharedWorldRuntime(THREE, state.scene);
   state.worldRoot = state.sharedWorld.root;
   setupVrWorldLighting();
-  state.renderedWorld = createVrNeighborhoodWorld(THREE, state.worldRoot, {
-    geometries: state.sharedWorld.geometries,
-    centerX: 0,
-    centerZ: 0,
-    radius: 2,
-  });
-  state.playerRig.position.set(0, 3.8, 0);
+  loadVrWorldMap(getInitialVrMapId(), true);
 
   setupMenuPanel();
   setupControllers();
@@ -667,6 +714,16 @@ function createPreviewScene() {
   });
   document.body.classList.add("is-vr-preview");
 }
+
+window.FLYS_WORLD_VR_LOAD_MAP = (mapId) => {
+  if (!state.sharedWorld) {
+    setStatus("Enter VR first, then load a VR map.", true);
+    return false;
+  }
+  const world = loadVrWorldMap(String(mapId || "").toLowerCase(), true);
+  setStatus(`Loaded ${world.mapName} in VR.`);
+  return true;
+};
 
 async function enterVr() {
   getDisplayName();
