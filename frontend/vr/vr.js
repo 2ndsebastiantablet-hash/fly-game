@@ -14,14 +14,24 @@ const state = {
   renderer: null,
   scene: null,
   camera: null,
+  playerRig: null,
+  flyBody: null,
   menuGroup: null,
   panelCanvas: null,
   panelContext: null,
   panelTexture: null,
   buttons: [],
+  controllers: [],
   raycasters: [],
   selectedButton: null,
   lobbies: [],
+  joined: false,
+  playerToken: "",
+  heartbeatTimer: null,
+  heartbeatInFlight: false,
+  yaw: 0,
+  lastFrameTime: 0,
+  lastSnapTurnAt: 0,
   status: "VR menu ready. Use either trigger to select.",
 };
 
@@ -51,6 +61,27 @@ function getDisplayNameLabel() {
 
 function getPrivateCode() {
   return (codeInput?.value || "").trim().toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 12);
+}
+
+function getControllerHand(controller, fallbackIndex = 0) {
+  return controller?.userData.inputSource?.handedness || (fallbackIndex === 0 ? "left" : "right");
+}
+
+function getControllerGamepad(controller) {
+  return controller?.userData.inputSource?.gamepad || null;
+}
+
+function getAxisValue(gamepad, primaryIndex, fallbackIndex) {
+  const primary = gamepad?.axes?.[primaryIndex] || 0;
+  if (Math.abs(primary) > 0.08) {
+    return primary;
+  }
+  return gamepad?.axes?.[fallbackIndex] || 0;
+}
+
+function isButtonPressed(gamepad, index, threshold = 0.55) {
+  const button = gamepad?.buttons?.[index];
+  return Boolean(button?.pressed || button?.value > threshold);
 }
 
 async function apiRequest(path, body = null, method = "GET") {
@@ -216,8 +247,15 @@ function setupControllers() {
   for (let index = 0; index < 2; index += 1) {
     const controller = state.renderer.xr.getController(index);
     controller.userData.index = index;
+    controller.addEventListener("connected", (event) => {
+      controller.userData.inputSource = event.data;
+    });
+    controller.addEventListener("disconnected", () => {
+      controller.userData.inputSource = null;
+    });
     controller.addEventListener("selectstart", () => selectCurrentButton(controller));
-    state.scene.add(controller);
+    state.playerRig.add(controller);
+    state.controllers.push(controller);
 
     const lineGeometry = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, 0),
@@ -231,6 +269,10 @@ function setupControllers() {
 }
 
 function updateRayPointers() {
+  if (state.joined) {
+    state.selectedButton = null;
+    return;
+  }
   state.selectedButton = null;
   for (const pointer of state.raycasters) {
     const tempMatrix = new THREE.Matrix4().identity().extractRotation(pointer.controller.matrixWorld);
@@ -247,6 +289,9 @@ function updateRayPointers() {
 }
 
 function selectCurrentButton(controller) {
+  if (state.joined) {
+    return;
+  }
   const pointer = state.raycasters.find((item) => item.controller === controller);
   if (!pointer) {
     return;
@@ -284,7 +329,7 @@ async function runMenuAction(action) {
         displayName: getDisplayName(),
         color: "#69C9FF",
       }, "POST");
-      setStatus(`Joined ${snapshot.lobby?.name || lobby.name}. Flying movement comes in a later VR phase.`);
+      startVrFlight(snapshot);
       return;
     }
 
@@ -299,7 +344,7 @@ async function runMenuAction(action) {
         displayName: getDisplayName(),
         color: "#69C9FF",
       }, "POST");
-      setStatus(`Joined private server ${snapshot.lobby?.code || code}. Flying movement comes later.`);
+      startVrFlight(snapshot);
       return;
     }
 
@@ -316,11 +361,184 @@ async function runMenuAction(action) {
         code,
         color: "#69C9FF",
       }, "POST");
-      setStatus(`Created ${visibility} server ${snapshot.lobby?.code ? `code ${snapshot.lobby.code}` : ""}. Movement comes in a later phase.`);
+      startVrFlight(snapshot);
     }
   } catch (error) {
     setStatus(error?.message || String(error), true);
   }
+}
+
+function startVrFlight(snapshot) {
+  state.joined = true;
+  state.playerToken = snapshot.player?.token || "";
+  state.menuGroup.visible = false;
+  state.buttons.forEach((button) => {
+    button.visible = false;
+  });
+  if (!state.flyBody) {
+    state.flyBody = createFirstPersonFly();
+    state.camera.add(state.flyBody);
+  }
+  state.playerRig.position.set(
+    Number(snapshot.player?.state?.x) || 0,
+    Number(snapshot.player?.state?.y) || 3.8,
+    Number(snapshot.player?.state?.z) || 0
+  );
+  setStatus(`Joined ${snapshot.lobby?.name || "server"}. VR flying controls active.`);
+  startHeartbeatLoop(true);
+}
+
+function buildVrPlayerState() {
+  return {
+    x: state.playerRig.position.x,
+    y: state.playerRig.position.y,
+    z: state.playerRig.position.z,
+    yaw: state.yaw,
+    pitch: 0,
+    roll: 0,
+  };
+}
+
+async function syncVrSession() {
+  if (!state.joined || !state.playerToken || state.heartbeatInFlight) {
+    return;
+  }
+  state.heartbeatInFlight = true;
+  try {
+    await apiRequest("/heartbeat", {
+      playerToken: state.playerToken,
+      state: buildVrPlayerState(),
+      color: "#69C9FF",
+    }, "POST");
+  } catch (error) {
+    setStatus(`VR server sync failed: ${error?.message || String(error)}`, true);
+  } finally {
+    state.heartbeatInFlight = false;
+  }
+}
+
+function startHeartbeatLoop(runImmediately = false) {
+  stopHeartbeatLoop();
+  if (runImmediately) {
+    syncVrSession();
+  }
+  state.heartbeatTimer = window.setInterval(syncVrSession, 900);
+}
+
+function stopHeartbeatLoop() {
+  if (state.heartbeatTimer) {
+    window.clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = null;
+  }
+}
+
+function createFirstPersonFly() {
+  const group = new THREE.Group();
+  group.position.set(0, -0.26, -0.58);
+
+  const bodyMaterial = new THREE.MeshBasicMaterial({ color: 0x2c2735 });
+  const wingMaterial = new THREE.MeshBasicMaterial({ color: 0xb8f2ff, transparent: true, opacity: 0.44, side: THREE.DoubleSide });
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xff3b72 });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), bodyMaterial);
+  body.scale.set(1, 0.75, 1.5);
+  group.add(body);
+
+  const leftWing = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.12), wingMaterial);
+  leftWing.position.set(-0.12, 0.05, 0);
+  leftWing.rotation.set(-0.45, 0.25, -0.35);
+  group.add(leftWing);
+
+  const rightWing = leftWing.clone();
+  rightWing.position.x *= -1;
+  rightWing.rotation.z *= -1;
+  group.add(rightWing);
+
+  const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), eyeMaterial);
+  leftEye.position.set(-0.045, 0.025, -0.09);
+  group.add(leftEye);
+
+  const rightEye = leftEye.clone();
+  rightEye.position.x *= -1;
+  group.add(rightEye);
+
+  const antennaMaterial = new THREE.LineBasicMaterial({ color: 0xf1c856 });
+  for (const side of [-1, 1]) {
+    const antenna = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(side * 0.025, 0.06, -0.08),
+        new THREE.Vector3(side * 0.09, 0.12, -0.18),
+      ]),
+      antennaMaterial
+    );
+    group.add(antenna);
+  }
+
+  return group;
+}
+
+function updateFlyBody(time) {
+  if (!state.flyBody) {
+    return;
+  }
+  const flap = Math.sin(time * 0.04);
+  const wings = state.flyBody.children.filter((child) => child.geometry?.type === "PlaneGeometry");
+  wings.forEach((wing, index) => {
+    wing.rotation.y = (index === 0 ? 0.25 : -0.25) + flap * 0.22;
+  });
+}
+
+function updateVrMovement(delta, time) {
+  if (!state.joined || !state.playerRig) {
+    return;
+  }
+
+  const left = state.controllers.find((controller) => getControllerHand(controller, controller.userData.index) === "left") || state.controllers[0];
+  const right = state.controllers.find((controller) => getControllerHand(controller, controller.userData.index) === "right") || state.controllers[1];
+  const leftGamepad = getControllerGamepad(left);
+  const rightGamepad = getControllerGamepad(right);
+
+  const moveX = THREE.MathUtils.clamp(getAxisValue(leftGamepad, 2, 0), -1, 1);
+  const moveY = THREE.MathUtils.clamp(getAxisValue(leftGamepad, 3, 1), -1, 1);
+  const turnX = THREE.MathUtils.clamp(getAxisValue(rightGamepad, 2, 0), -1, 1);
+  const now = performance.now();
+
+  if (Math.abs(turnX) > 0.72 && now - state.lastSnapTurnAt > 320) {
+    state.yaw -= Math.sign(turnX) * Math.PI / 6;
+    state.playerRig.rotation.y = state.yaw;
+    state.lastSnapTurnAt = now;
+  }
+
+  const upPressed = isButtonPressed(rightGamepad, 0) || isButtonPressed(rightGamepad, 4);
+  const downPressed = isButtonPressed(leftGamepad, 0) || isButtonPressed(rightGamepad, 5);
+  const speed = 5.6;
+  const verticalSpeed = 4.2;
+
+  const forward = new THREE.Vector3();
+  state.camera.getWorldDirection(forward);
+  forward.y = 0;
+  if (forward.lengthSq() < 0.0001) {
+    forward.set(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.yaw);
+  } else {
+    forward.normalize();
+  }
+  const rightVector = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  const movement = new THREE.Vector3()
+    .addScaledVector(forward, -moveY)
+    .addScaledVector(rightVector, moveX);
+
+  if (movement.lengthSq() > 1) {
+    movement.normalize();
+  }
+  state.playerRig.position.addScaledVector(movement, speed * delta);
+  if (upPressed) {
+    state.playerRig.position.y += verticalSpeed * delta;
+  }
+  if (downPressed) {
+    state.playerRig.position.y -= verticalSpeed * delta;
+  }
+  state.playerRig.position.y = THREE.MathUtils.clamp(state.playerRig.position.y, 0.7, 80);
+  updateFlyBody(time);
 }
 
 function createPreviewScene() {
@@ -328,6 +546,10 @@ function createPreviewScene() {
   state.scene.background = new THREE.Color(0x11162d);
   state.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 50);
   state.camera.position.set(0, 1.55, 0);
+  state.playerRig = new THREE.Group();
+  state.playerRig.position.set(0, 0, 0);
+  state.playerRig.add(state.camera);
+  state.scene.add(state.playerRig);
 
   state.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
   state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
@@ -352,8 +574,11 @@ function createPreviewScene() {
     state.renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  state.renderer.setAnimationLoop(() => {
+  state.renderer.setAnimationLoop((time) => {
+    const delta = state.lastFrameTime ? Math.min((time - state.lastFrameTime) / 1000, 0.05) : 0;
+    state.lastFrameTime = time;
     updateRayPointers();
+    updateVrMovement(delta, time);
     state.renderer.render(state.scene, state.camera);
   });
   document.body.classList.add("is-vr-preview");
@@ -389,4 +614,7 @@ if (nameInput) {
 }
 
 enterButton?.addEventListener("click", enterVr);
+window.addEventListener("beforeunload", () => {
+  stopHeartbeatLoop();
+});
 setStatus("VR route loaded. Enter VR to open the floating server menu.");
