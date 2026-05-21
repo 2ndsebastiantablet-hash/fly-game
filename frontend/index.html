@@ -209,7 +209,38 @@
     </p>
   </section>
 
-  <script src="./config.js"></script>
-  <script type="module" src="./game.js"></script>
+  <script>
+    if (window.location.pathname === "/vr" || window.location.pathname === "/vr/") {
+      document.title = "Flys World VR";
+      document.querySelector('link[href="./style.css"]').href = "/vr/style.css";
+      document.body.innerHTML = `
+        <main class="vr-shell">
+          <section class="vr-card" aria-labelledby="vr-title">
+            <p class="vr-kicker">Separate VR Prototype</p>
+            <h1 id="vr-title">Flys World VR</h1>
+            <p class="vr-copy">
+              This is the safe Phase 1 VR route. The regular PC game stays on the main page, and this page is only a start screen for future WebXR work.
+            </p>
+            <button id="vr-start-button" type="button">Check VR Support</button>
+            <p id="vr-status" class="vr-status" role="status">Preparing VR start screen...</p>
+            <a class="vr-link" href="/">Back to PC Game</a>
+          </section>
+        </main>
+      `;
+      const vrScript = document.createElement("script");
+      vrScript.src = "/vr/vr.js";
+      vrScript.defer = true;
+      document.body.append(vrScript);
+    } else {
+      const configScript = document.createElement("script");
+      configScript.src = "./config.js";
+      document.body.append(configScript);
+
+      const gameScript = document.createElement("script");
+      gameScript.type = "module";
+      gameScript.src = "./game.js";
+      document.body.append(gameScript);
+    }
+  </script>
 </body>
 </html>
