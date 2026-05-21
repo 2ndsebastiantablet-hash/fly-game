@@ -1,5 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
 import { createSharedWorldRuntime, getMapTeleportState } from "../shared/world.js";
+import { createVrNeighborhoodWorld } from "../shared/vr-neighborhood-world.js";
 
 const statusEl = document.querySelector("#vr-status");
 const enterButton = document.querySelector("#vr-enter-button");
@@ -26,6 +27,12 @@ const state = {
   raycasters: [],
   worldRoot: null,
   sharedWorld: null,
+  renderedWorld: null,
+  debugGroup: null,
+  debugCanvas: null,
+  debugContext: null,
+  debugTexture: null,
+  debugLastUpdate: 0,
   selectedButton: null,
   lobbies: [],
   joined: false,
@@ -266,6 +273,63 @@ function setupControllers() {
   }
 }
 
+function setupVrDebugPanel() {
+  const { canvas, context, texture } = makeCanvasTexture(768, 256);
+  state.debugCanvas = canvas;
+  state.debugContext = context;
+  state.debugTexture = texture;
+
+  state.debugGroup = new THREE.Group();
+  state.debugGroup.position.set(-0.98, 0.58, -1.45);
+  state.debugGroup.rotation.x = -0.08;
+  state.camera.add(state.debugGroup);
+
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0.84,
+    side: THREE.DoubleSide,
+  });
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.64), material);
+  state.debugGroup.add(panel);
+  updateVrDebugPanel(0, true);
+}
+
+function updateVrDebugPanel(time = 0, force = false) {
+  if (!state.debugContext || !state.debugTexture || !state.playerRig) {
+    return;
+  }
+  if (!force && time - state.debugLastUpdate < 250) {
+    return;
+  }
+  state.debugLastUpdate = time;
+
+  const context = state.debugContext;
+  const world = state.renderedWorld;
+  const position = state.playerRig.position;
+  context.clearRect(0, 0, 768, 256);
+  context.fillStyle = "rgba(9, 14, 26, 0.86)";
+  context.fillRect(0, 0, 768, 256);
+  context.strokeStyle = "#f1c856";
+  context.lineWidth = 5;
+  context.strokeRect(6, 6, 756, 244);
+  context.fillStyle = "#f1c856";
+  context.font = "bold 30px Trebuchet MS, sans-serif";
+  context.fillText("VR WORLD DEBUG", 28, 42);
+  context.fillStyle = "#ffffff";
+  context.font = "24px Trebuchet MS, sans-serif";
+  context.fillText(`Map: ${world?.mapName || "not loaded"}`, 28, 86);
+  context.fillText(
+    `Position: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`,
+    28,
+    122
+  );
+  context.fillText(`Chunks: ${world?.chunks?.size ?? 0}   Objects: ${world?.objectCount ?? 0}`, 28, 158);
+  context.fillText(`Shared geometry: ${state.sharedWorld?.geometries ? "loaded" : "missing"}`, 28, 194);
+  context.fillText(`Actors: ${world?.actorCount ?? 0}`, 28, 230);
+  state.debugTexture.needsUpdate = true;
+}
+
 function updateRayPointers() {
   if (state.joined) {
     state.selectedButton = null;
@@ -383,6 +447,7 @@ function startVrFlight(snapshot) {
     Number(snapshot.player?.state?.y) || sharedSpawn.y,
     Number(snapshot.player?.state?.z) || sharedSpawn.z
   );
+  updateVrDebugPanel(performance.now(), true);
   setStatus(`Joined ${snapshot.lobby?.name || "server"}. VR flying controls active.`);
   startHeartbeatLoop(true);
 }
@@ -539,9 +604,23 @@ function updateVrMovement(delta, time) {
   updateFlyBody(time);
 }
 
+function setupVrWorldLighting() {
+  const hemisphere = new THREE.HemisphereLight(0xeaf5ff, 0x5f714f, 1.55);
+  state.scene.add(hemisphere);
+
+  const sun = new THREE.DirectionalLight(0xffffff, 1.8);
+  sun.position.set(70, 120, 45);
+  state.scene.add(sun);
+
+  const fill = new THREE.DirectionalLight(0xbdd8ff, 0.42);
+  fill.position.set(-60, 50, -70);
+  state.scene.add(fill);
+}
+
 function createPreviewScene() {
   state.scene = new THREE.Scene();
   state.scene.background = new THREE.Color(0x8cc4f6);
+  state.scene.fog = new THREE.Fog(0xa7cdfd, 120, 360);
   state.camera = new THREE.PerspectiveCamera(76, window.innerWidth / window.innerHeight, 0.01, 900);
   state.camera.position.set(0, 1.55, 0);
   state.playerRig = new THREE.Group();
@@ -558,9 +637,18 @@ function createPreviewScene() {
 
   state.sharedWorld = createSharedWorldRuntime(THREE, state.scene);
   state.worldRoot = state.sharedWorld.root;
+  setupVrWorldLighting();
+  state.renderedWorld = createVrNeighborhoodWorld(THREE, state.worldRoot, {
+    geometries: state.sharedWorld.geometries,
+    centerX: 0,
+    centerZ: 0,
+    radius: 2,
+  });
+  state.playerRig.position.set(0, 3.8, 0);
 
   setupMenuPanel();
   setupControllers();
+  setupVrDebugPanel();
 
   window.addEventListener("resize", () => {
     state.camera.aspect = window.innerWidth / window.innerHeight;
@@ -573,6 +661,8 @@ function createPreviewScene() {
     state.lastFrameTime = time;
     updateRayPointers();
     updateVrMovement(delta, time);
+    state.renderedWorld?.update(delta, time * 0.001);
+    updateVrDebugPanel(time);
     state.renderer.render(state.scene, state.camera);
   });
   document.body.classList.add("is-vr-preview");
