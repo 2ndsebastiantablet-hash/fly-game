@@ -23,6 +23,7 @@ const state = {
   buttons: [],
   controllers: [],
   raycasters: [],
+  worldRoot: null,
   selectedButton: null,
   lobbies: [],
   joined: false,
@@ -77,11 +78,6 @@ function getAxisValue(gamepad, primaryIndex, fallbackIndex) {
     return primary;
   }
   return gamepad?.axes?.[fallbackIndex] || 0;
-}
-
-function isButtonPressed(gamepad, index, threshold = 0.55) {
-  const button = gamepad?.buttons?.[index];
-  return Boolean(button?.pressed || button?.value > threshold);
 }
 
 async function apiRequest(path, body = null, method = "GET") {
@@ -434,7 +430,7 @@ function stopHeartbeatLoop() {
 
 function createFirstPersonFly() {
   const group = new THREE.Group();
-  group.position.set(0, -0.26, -0.58);
+  group.position.set(0, -0.28, -0.62);
 
   const bodyMaterial = new THREE.MeshBasicMaterial({ color: 0x2c2735 });
   const wingMaterial = new THREE.MeshBasicMaterial({ color: 0xb8f2ff, transparent: true, opacity: 0.44, side: THREE.DoubleSide });
@@ -477,6 +473,326 @@ function createFirstPersonFly() {
   return group;
 }
 
+const retroMaterials = new Map();
+
+function makeRetroTexture(key, draw, width = 64, height = 64) {
+  const cacheKey = `${key}:${width}x${height}`;
+  if (retroMaterials.has(cacheKey)) {
+    return retroMaterials.get(cacheKey);
+  }
+  const { context, texture } = makeCanvasTexture(width, height);
+  draw(context, width, height);
+  texture.needsUpdate = true;
+  const material = new THREE.MeshBasicMaterial({ map: texture });
+  retroMaterials.set(cacheKey, material);
+  return material;
+}
+
+function makeFlatMaterial(color) {
+  const key = `flat:${color}`;
+  if (!retroMaterials.has(key)) {
+    retroMaterials.set(key, new THREE.MeshBasicMaterial({ color }));
+  }
+  return retroMaterials.get(key);
+}
+
+function makeWallMaterial(key, base, trim, windowColor = "#9fb8d8", lit = false) {
+  return makeRetroTexture(key, (context, width, height) => {
+    context.fillStyle = base;
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = trim;
+    for (let y = 0; y < height; y += 16) {
+      context.fillRect(0, y, width, 2);
+    }
+    for (let x = 0; x < width; x += 16) {
+      context.fillRect(x, 0, 2, height);
+    }
+    context.fillStyle = lit ? "#ffd56f" : windowColor;
+    for (let y = 8; y < height - 6; y += 18) {
+      for (let x = 7; x < width - 8; x += 18) {
+        context.fillRect(x, y, 7, 8);
+        context.fillStyle = "rgba(8, 12, 24, 0.35)";
+        context.fillRect(x, y + 8, 7, 2);
+        context.fillStyle = lit ? "#ffd56f" : windowColor;
+      }
+    }
+  });
+}
+
+function makeMarbleMaterial(key, base = "#f4f1dc", trim = "#d6a840") {
+  return makeRetroTexture(key, (context, width, height) => {
+    context.fillStyle = base;
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "rgba(156, 145, 129, 0.34)";
+    for (let i = 0; i < 22; i += 1) {
+      const x = (i * 19) % width;
+      const y = (i * 11) % height;
+      context.fillRect(x, y, 9, 2);
+      context.fillRect((x + 4) % width, (y + 4) % height, 2, 8);
+    }
+    context.fillStyle = trim;
+    context.fillRect(0, 0, width, 4);
+    context.fillRect(0, height - 4, width, 4);
+    context.fillRect(0, 0, 4, height);
+    context.fillRect(width - 4, 0, 4, height);
+  });
+}
+
+function makeRoofMaterial(key, base = "#5a2f38", stripe = "#3a1c22") {
+  return makeRetroTexture(key, (context, width, height) => {
+    context.fillStyle = base;
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = stripe;
+    for (let y = 0; y < height; y += 10) {
+      context.fillRect(0, y, width, 3);
+    }
+    context.fillStyle = "rgba(255, 214, 118, 0.35)";
+    context.fillRect(7, 8, 9, 3);
+    context.fillRect(38, 31, 13, 3);
+  });
+}
+
+function makeGroundMaterial(key, base, stripe) {
+  return makeRetroTexture(key, (context, width, height) => {
+    context.fillStyle = base;
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = stripe;
+    for (let y = 0; y < height; y += 16) {
+      context.fillRect(0, y, width, 2);
+    }
+    for (let x = 0; x < width; x += 16) {
+      context.fillRect(x, 0, 2, height);
+    }
+  });
+}
+
+function createBox(parent, position, scale, material) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  mesh.position.set(position.x, position.y, position.z);
+  mesh.scale.set(scale.x, scale.y, scale.z);
+  parent.add(mesh);
+  return mesh;
+}
+
+function createFaceBox(parent, position, scale, faces) {
+  return createBox(parent, position, scale, [
+    faces.side,
+    faces.side,
+    faces.top,
+    faces.bottom || faces.top,
+    faces.front,
+    faces.back || faces.side,
+  ]);
+}
+
+function createBillboardLabel(parent, text, position, width = 6, height = 1.3) {
+  const { context, texture } = makeCanvasTexture(256, 80);
+  context.fillStyle = "rgba(10, 12, 26, 0.82)";
+  roundRect(context, 8, 8, 240, 64, 8);
+  context.fill();
+  context.strokeStyle = "#f5c84b";
+  context.lineWidth = 5;
+  context.stroke();
+  context.fillStyle = "#f8efd0";
+  context.font = "bold 24px monospace";
+  context.textAlign = "center";
+  context.fillText(text, 128, 49);
+  texture.needsUpdate = true;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide })
+  );
+  mesh.position.set(position.x, position.y, position.z);
+  parent.add(mesh);
+  return mesh;
+}
+
+function createRetroHouse(parent, x, z, colorKey = 0) {
+  const palettes = [
+    ["#8d5945", "#442a32", "#b4c9df"],
+    ["#406d78", "#1e3747", "#c7d8e5"],
+    ["#91704b", "#4c3226", "#b9cfe2"],
+  ];
+  const [base, trim, glass] = palettes[colorKey % palettes.length];
+  const wall = makeWallMaterial(`vr-house-wall-${colorKey}`, base, trim, glass);
+  const roof = makeRoofMaterial(`vr-house-roof-${colorKey}`);
+  const dark = makeFlatMaterial(0x1d1720);
+  createFaceBox(parent, { x, y: 2.1, z }, { x: 5.2, y: 4.2, z: 4.4 }, {
+    front: wall,
+    back: wall,
+    side: wall,
+    top: roof,
+    bottom: dark,
+  });
+  createBox(parent, { x, y: 4.55, z }, { x: 5.8, y: 0.7, z: 4.9 }, roof);
+  createBox(parent, { x: x - 1.4, y: 1.05, z: z - 2.25 }, { x: 0.85, y: 1.9, z: 0.12 }, makeFlatMaterial(0x2a1d20));
+}
+
+function createRetroTower(parent, x, z, width, depth, height, colorKey = 0) {
+  const palettes = [
+    ["#474d68", "#202538", "#93a8c8"],
+    ["#6c4f4d", "#2f232a", "#8ea4c0"],
+    ["#505b54", "#27322f", "#a7bacb"],
+  ];
+  const [base, trim, glass] = palettes[colorKey % palettes.length];
+  const wall = makeWallMaterial(`vr-tower-wall-${colorKey}`, base, trim, glass);
+  const roof = makeRoofMaterial(`vr-tower-roof-${colorKey}`, "#282b36", "#151822");
+  createFaceBox(parent, { x, y: height / 2, z }, { x: width, y: height, z: depth }, {
+    front: wall,
+    back: wall,
+    side: wall,
+    top: roof,
+    bottom: makeFlatMaterial(0x191922),
+  });
+  createBox(parent, { x: x - width * 0.35, y: height + 0.55, z }, { x: width * 0.22, y: 1.1, z: depth * 0.42 }, makeFlatMaterial(0x232637));
+}
+
+function createTree(parent, x, z, height = 10, canopyColor = 0x184c2b) {
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.34, height * 0.55, 6), makeFlatMaterial(0x4b2b20));
+  trunk.position.set(x, height * 0.28, z);
+  parent.add(trunk);
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(2.1, height * 0.62, 7), makeFlatMaterial(canopyColor));
+  canopy.position.set(x, height * 0.76, z);
+  parent.add(canopy);
+}
+
+function createVehicle(parent, x, z, color = 0xd85a3c, long = false) {
+  createBox(parent, { x, y: 0.42, z }, { x: long ? 5.8 : 3.1, y: 0.65, z: 1.55 }, makeFlatMaterial(color));
+  createBox(parent, { x: x - 0.25, y: 0.96, z }, { x: long ? 2.7 : 1.35, y: 0.65, z: 1.28 }, makeFlatMaterial(0x263247));
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.2, 8), makeFlatMaterial(0x111114));
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(x + sx * (long ? 2.15 : 1.05), 0.22, z + sz * 0.82);
+      parent.add(wheel);
+    }
+  }
+}
+
+function createLamp(parent, x, z) {
+  createBox(parent, { x, y: 2.2, z }, { x: 0.12, y: 4.4, z: 0.12 }, makeFlatMaterial(0x23222b));
+  createBox(parent, { x, y: 4.45, z: z - 0.42 }, { x: 0.8, y: 0.18, z: 0.18 }, makeFlatMaterial(0x23222b));
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), makeFlatMaterial(0xffd56f));
+  light.position.set(x, 4.35, z - 0.85);
+  parent.add(light);
+}
+
+function createNeighborhood(parent) {
+  const zone = new THREE.Group();
+  parent.add(zone);
+  const grass = makeGroundMaterial("vr-grass", "#426e31", "#315326");
+  const road = makeGroundMaterial("vr-road", "#292a31", "#1a1a21");
+  const sidewalk = makeGroundMaterial("vr-sidewalk", "#8a8378", "#686158");
+  createBox(zone, { x: 0, y: -0.06, z: 0 }, { x: 92, y: 0.1, z: 92 }, grass);
+  createBox(zone, { x: 0, y: 0.01, z: 0 }, { x: 86, y: 0.05, z: 6 }, road);
+  createBox(zone, { x: 0, y: 0.03, z: -6 }, { x: 86, y: 0.06, z: 2.4 }, sidewalk);
+  createBox(zone, { x: 0, y: 0.03, z: 6 }, { x: 86, y: 0.06, z: 2.4 }, sidewalk);
+  for (let i = 0; i < 7; i += 1) {
+    const x = -36 + i * 12;
+    createRetroHouse(zone, x, -17, i);
+    createRetroHouse(zone, x + 4, 18, i + 1);
+    createLamp(zone, x + 5, -6.8);
+    createVehicle(zone, x - 2, (i % 2 ? 1.8 : -1.8), i % 2 ? 0x3f74b5 : 0xc45d36);
+  }
+  for (let i = 0; i < 16; i += 1) {
+    createTree(zone, -42 + (i % 8) * 12, i < 8 ? -33 : 34, 6.5, 0x2f793f);
+  }
+  createBillboardLabel(zone, "NEIGHBORHOOD", { x: 0, y: 6.5, z: -31 });
+}
+
+function createForest(parent) {
+  const zone = new THREE.Group();
+  zone.position.set(98, 0, 10);
+  parent.add(zone);
+  createBox(zone, { x: 0, y: -0.08, z: 0 }, { x: 78, y: 0.1, z: 92 }, makeGroundMaterial("vr-forest-ground", "#172d1c", "#0d1c12"));
+  for (let i = 0; i < 56; i += 1) {
+    const x = -34 + (i % 8) * 9.6 + ((i * 7) % 3);
+    const z = -40 + Math.floor(i / 8) * 12 + ((i * 5) % 4);
+    createTree(zone, x, z, 15 + (i % 4) * 2, i % 3 === 0 ? 0x0d291b : 0x123820);
+  }
+  createBox(zone, { x: 0, y: 15.5, z: 0 }, { x: 78, y: 0.55, z: 92 }, makeFlatMaterial(0x0a1b10));
+  for (let i = 0; i < 18; i += 1) {
+    createBox(zone, { x: -30 + (i % 6) * 12, y: 0.22, z: -28 + Math.floor(i / 6) * 21 }, { x: 2.5, y: 0.4, z: 1.5 }, makeFlatMaterial(0x315d2f));
+  }
+  createBillboardLabel(zone, "FOREST", { x: 0, y: 7.5, z: -42 });
+}
+
+function createCity(parent) {
+  const zone = new THREE.Group();
+  zone.position.set(0, 0, -118);
+  parent.add(zone);
+  const asphalt = makeGroundMaterial("vr-city-asphalt", "#242229", "#15151c");
+  const sidewalk = makeGroundMaterial("vr-city-sidewalk", "#756f72", "#575157");
+  createBox(zone, { x: 0, y: -0.08, z: 0 }, { x: 112, y: 0.1, z: 96 }, asphalt);
+  for (let lane = -1; lane <= 1; lane += 1) {
+    createBox(zone, { x: lane * 24, y: 0.02, z: 0 }, { x: 7.5, y: 0.05, z: 92 }, makeFlatMaterial(0x2e2c33));
+    createBox(zone, { x: 0, y: 0.03, z: lane * 24 }, { x: 108, y: 0.05, z: 5.8 }, makeFlatMaterial(0x2e2c33));
+  }
+  for (let i = 0; i < 12; i += 1) {
+    createBox(zone, { x: -50 + i * 9, y: 0.05, z: -34 }, { x: 6.5, y: 0.08, z: 4 }, sidewalk);
+    createBox(zone, { x: -50 + i * 9, y: 0.05, z: 34 }, { x: 6.5, y: 0.08, z: 4 }, sidewalk);
+  }
+  for (let i = 0; i < 14; i += 1) {
+    const x = -46 + (i % 7) * 15;
+    const z = i < 7 ? -35 : 35;
+    createRetroTower(zone, x, z, 7 + (i % 3), 7, 13 + (i % 5) * 4, i);
+  }
+  createFaceBox(zone, { x: -35, y: 4, z: 0 }, { x: 12, y: 8, z: 8 }, {
+    front: makeWallMaterial("vr-bank-front", "#77664d", "#2e2630", "#ffd56f", true),
+    side: makeWallMaterial("vr-bank-side", "#66574b", "#2e2630", "#b9cfe2"),
+    top: makeMarbleMaterial("vr-bank-roof", "#d4c9a2", "#bc8f32"),
+    bottom: makeFlatMaterial(0x211a1c),
+  });
+  createBillboardLabel(zone, "BANK", { x: -35, y: 9.4, z: -4.2 }, 4, 1);
+  createFaceBox(zone, { x: 34, y: 6.5, z: 0 }, { x: 11, y: 13, z: 8 }, {
+    front: makeWallMaterial("vr-hotel-front", "#634f66", "#281f34", "#ffd56f", true),
+    side: makeWallMaterial("vr-hotel-side", "#58495d", "#281f34", "#a3b7d2"),
+    top: makeRoofMaterial("vr-hotel-roof", "#343142", "#1d1b28"),
+    bottom: makeFlatMaterial(0x211a1c),
+  });
+  createBillboardLabel(zone, "CITY", { x: 0, y: 12, z: -45 });
+  for (let i = 0; i < 18; i += 1) {
+    createVehicle(zone, -48 + (i % 9) * 12, -12 + Math.floor(i / 9) * 24, i % 3 === 0 ? 0xc0a04b : 0x3f74b5, i % 5 === 0);
+    if (i % 2 === 0) createLamp(zone, -48 + i * 5.5, -26);
+  }
+}
+
+function createHaven(parent) {
+  const zone = new THREE.Group();
+  zone.position.set(-115, 12, 64);
+  parent.add(zone);
+  const marble = makeMarbleMaterial("vr-haven-marble");
+  const gold = makeFlatMaterial(0xd6a840);
+  const hedge = makeFlatMaterial(0x3a8a46);
+  createBox(zone, { x: 0, y: -0.2, z: 0 }, { x: 54, y: 0.35, z: 54 }, marble);
+  createBox(zone, { x: 0, y: 4.5, z: -18 }, { x: 30, y: 9, z: 2 }, makeMarbleMaterial("vr-haven-wall"));
+  for (let i = 0; i < 6; i += 1) {
+    const x = -20 + i * 8;
+    createBox(zone, { x, y: 3, z: -12 }, { x: 1.1, y: 6, z: 1.1 }, gold);
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 8), makeFlatMaterial(0xfff0a4));
+    orb.position.set(x, 6.6, -12);
+    zone.add(orb);
+  }
+  for (let i = 0; i < 10; i += 1) {
+    createBox(zone, { x: -23 + i * 5, y: 1.5, z: 14 }, { x: 1.3, y: 3, z: 10 }, hedge);
+    createBox(zone, { x: -23 + i * 5, y: 1.5, z: 24 }, { x: 4.2, y: 3, z: 1.2 }, hedge);
+  }
+  createBox(zone, { x: 0, y: 15, z: 20 }, { x: 5, y: 30, z: 5 }, makeMarbleMaterial("vr-haven-tower", "#f2edff", "#d6a840"));
+  createBox(zone, { x: 0, y: 31, z: 20 }, { x: 12, y: 1.4, z: 12 }, gold);
+  createBillboardLabel(zone, "HAVEN", { x: 0, y: 8.8, z: -25 });
+}
+
+function createVrWorld() {
+  state.worldRoot = new THREE.Group();
+  state.scene.add(state.worldRoot);
+  state.scene.background = new THREE.Color(0x8cc4f6);
+  state.scene.fog = new THREE.Fog(0x8cc4f6, 95, 320);
+  createNeighborhood(state.worldRoot);
+  createForest(state.worldRoot);
+  createCity(state.worldRoot);
+  createHaven(state.worldRoot);
+}
+
 function updateFlyBody(time) {
   if (!state.flyBody) {
     return;
@@ -509,20 +825,23 @@ function updateVrMovement(delta, time) {
     state.lastSnapTurnAt = now;
   }
 
-  const upPressed = isButtonPressed(rightGamepad, 0) || isButtonPressed(rightGamepad, 4);
-  const downPressed = isButtonPressed(leftGamepad, 0) || isButtonPressed(rightGamepad, 5);
   const speed = 5.6;
-  const verticalSpeed = 4.2;
 
   const forward = new THREE.Vector3();
   state.camera.getWorldDirection(forward);
-  forward.y = 0;
   if (forward.lengthSq() < 0.0001) {
     forward.set(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.yaw);
   } else {
     forward.normalize();
   }
-  const rightVector = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  const flatForward = forward.clone();
+  flatForward.y = 0;
+  if (flatForward.lengthSq() < 0.0001) {
+    flatForward.set(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.yaw);
+  } else {
+    flatForward.normalize();
+  }
+  const rightVector = new THREE.Vector3().crossVectors(flatForward, new THREE.Vector3(0, 1, 0)).normalize();
   const movement = new THREE.Vector3()
     .addScaledVector(forward, -moveY)
     .addScaledVector(rightVector, moveX);
@@ -531,20 +850,16 @@ function updateVrMovement(delta, time) {
     movement.normalize();
   }
   state.playerRig.position.addScaledVector(movement, speed * delta);
-  if (upPressed) {
-    state.playerRig.position.y += verticalSpeed * delta;
-  }
-  if (downPressed) {
-    state.playerRig.position.y -= verticalSpeed * delta;
-  }
-  state.playerRig.position.y = THREE.MathUtils.clamp(state.playerRig.position.y, 0.7, 80);
+  state.playerRig.position.y = THREE.MathUtils.clamp(state.playerRig.position.y, 0.7, 95);
+  state.playerRig.position.x = THREE.MathUtils.clamp(state.playerRig.position.x, -170, 155);
+  state.playerRig.position.z = THREE.MathUtils.clamp(state.playerRig.position.z, -190, 115);
   updateFlyBody(time);
 }
 
 function createPreviewScene() {
   state.scene = new THREE.Scene();
-  state.scene.background = new THREE.Color(0x11162d);
-  state.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 50);
+  state.scene.background = new THREE.Color(0x8cc4f6);
+  state.camera = new THREE.PerspectiveCamera(76, window.innerWidth / window.innerHeight, 0.01, 900);
   state.camera.position.set(0, 1.55, 0);
   state.playerRig = new THREE.Group();
   state.playerRig.position.set(0, 0, 0);
@@ -558,12 +873,7 @@ function createPreviewScene() {
   state.renderer.domElement.className = "vr-canvas";
   document.body.prepend(state.renderer.domElement);
 
-  const floor = new THREE.Mesh(
-    new THREE.CircleGeometry(5, 32),
-    new THREE.MeshBasicMaterial({ color: 0x20264b, side: THREE.DoubleSide })
-  );
-  floor.rotation.x = -Math.PI / 2;
-  state.scene.add(floor);
+  createVrWorld();
 
   setupMenuPanel();
   setupControllers();
