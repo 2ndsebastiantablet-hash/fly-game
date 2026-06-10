@@ -1,0 +1,18 @@
+name = "last-civilization-standing"
+main = "src/worker.js"
+compatibility_date = "2026-06-09"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[durable_objects]
+bindings = [
+  { name = "LOBBY_DIRECTORY", class_name = "LobbyDirectory" },
+  { name = "GAME_ROOM", class_name = "GameRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LobbyDirectory", "GameRoom
