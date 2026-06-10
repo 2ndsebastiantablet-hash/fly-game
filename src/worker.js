@@ -3,6 +3,12 @@ import { GameRoom } from "./room.js";
 export { LobbyDirectory, GameRoom };
 
 const LOBBY = "global";
-function json(d, s = 200) { return new Response(JSON.stringify(d), { status: s, headers: { "content-type": "application/json" } }); }
-async function read(r) { try { return await r.json(); } catch { return {}; } }
-function clean(v, f, m = 32) { const t = String(v ? v : "").trim(); return (t ? t : f).slice(
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+}
+async function read(request) {
+  try { return await request.json(); } catch { return {}; }
+}
+function clean(value, fallback, max) {
+  const text = String(value ? value : "").trim();
+  return (text ? text : fallback
