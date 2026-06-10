@@ -1,13 +1,17 @@
 export class LobbyDirectory {
   fetch() {
-    return new Response(JSON.stringify({ ok: true, servers: [] }), { headers: { "content-type": "application/json" } });
+    const data = JSON.stringify({ ok: true, servers: [] });
+    return new Response(data, { headers: { "content-type": "application/json" } });
   }
 }
 
 export class GameRoom {
   fetch() {
-    return new Response(JSON.stringify({ ok: false, error: "Room backend not finished yet." }), { status: 501, headers: { "content-type": "application/json" } });
+    const data = JSON.stringify({ ok: false, error: "Room backend pending." });
+    return new Response(data, { status: 501, headers: { "content-type": "application/json" } });
   }
 }
 
 export default {
+  fetch(request, env) {
+    const url = new URL(request.url
