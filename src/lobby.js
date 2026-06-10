@@ -1,15 +1,14 @@
-const toText = data => JSON.stringify(data);
-function reply(data, status = 200) {
-  return new Response(toText(data), { status, headers: { "content-type": "application/json" } });
+const SPEED = 7;
+function res(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
-function safeName(value, fallback) {
-  const text = String(value ? value : "").trim();
-  if (text.length > 0) return text.slice(0, 32);
-  return fallback;
+async function read(request) {
+  try { return await request.json(); } catch { return {}; }
 }
-function key(roomId) { return "room:" + roomId; }
+function txt(value, fallback, max = 32) {
+  const out = String(value ? value : "").trim();
+  return (out.length ? out : fallback).slice(0, max);
+}
+function roomCode(value) { return txt(value, "CODE", 16).toUpperCase(); }
 
-export class LobbyDirectory {
-  constructor(state, env) {
-    this.state = state;
-    this.env = env
+export class Lobby
