@@ -11,5 +11,5 @@ export class GameRoom {
 }
 
 export default {
-  fetch(request, env) {
-    return
+  fetch() {
+    return new Response('<!doctype html><title>Last Civilization Standing</title><h1>Last
